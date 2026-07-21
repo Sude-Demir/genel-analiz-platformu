@@ -29,7 +29,7 @@ def render(emp: pd.DataFrame, pipeline, explainer):
         apply_layout(fig, showlegend=False)
         st.plotly_chart(fig, width="stretch")
         st.caption(
-            "Model: Random Forest sınıflandırıcı, IBM HR Analytics Employee Attrition veri seti üzerinde eğitildi."
+            "Model: LightGBM (Gradient Boosting) sınıflandırıcı, IBM HR Analytics Employee Attrition veri seti üzerinde eğitildi."
         )
 
     with tab2:

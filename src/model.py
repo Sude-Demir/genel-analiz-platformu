@@ -4,10 +4,10 @@ import os
 import joblib
 import pandas as pd
 import shap
+from lightgbm import LGBMClassifier
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, roc_auc_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
@@ -35,11 +35,20 @@ def build_pipeline() -> Pipeline:
         ("cat", OneHotEncoder(handle_unknown="ignore"), CATEGORICAL_FEATURES),
     ], remainder="passthrough")
 
-    model = RandomForestClassifier(
-        n_estimators=300, max_depth=8, min_samples_leaf=5,
-        class_weight="balanced", random_state=42,
-    )
+    model = LGBMClassifier(class_weight="balanced", random_state=42, verbose=-1)
     return Pipeline([("preprocess", preprocessor), ("model", model)])
+
+
+PARAM_DISTRIBUTIONS = {
+    "model__n_estimators": [100, 200, 300, 500],
+    "model__num_leaves": [15, 31, 63, 127],
+    "model__learning_rate": [0.01, 0.03, 0.05, 0.1],
+    "model__min_child_samples": [5, 10, 20, 30],
+    "model__reg_alpha": [0, 0.1, 0.5, 1.0],
+    "model__reg_lambda": [0, 0.1, 0.5, 1.0],
+    "model__subsample": [0.7, 0.8, 0.9, 1.0],
+    "model__colsample_bytree": [0.7, 0.8, 0.9, 1.0],
+}
 
 
 def train():
@@ -51,14 +60,22 @@ def train():
         X, y, test_size=0.2, stratify=y, random_state=42
     )
 
-    pipeline = build_pipeline()
-    pipeline.fit(X_train, y_train)
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    search = RandomizedSearchCV(
+        build_pipeline(), PARAM_DISTRIBUTIONS,
+        n_iter=30, scoring="roc_auc", cv=cv, random_state=42, n_jobs=-1,
+    )
+    search.fit(X_train, y_train)
+    pipeline = search.best_estimator_
+
+    print(f"En iyi hiperparametreler: {search.best_params_}")
+    print(f"CV ROC-AUC (ortalama): {search.best_score_:.3f}")
 
     y_pred = pipeline.predict(X_test)
     y_proba = pipeline.predict_proba(X_test)[:, 1]
 
     print(classification_report(y_test, y_pred, target_names=["Kalıyor", "Ayrılıyor"]))
-    print(f"ROC-AUC: {roc_auc_score(y_test, y_proba):.3f}")
+    print(f"Test ROC-AUC: {roc_auc_score(y_test, y_proba):.3f}")
 
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     joblib.dump({

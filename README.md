@@ -8,14 +8,15 @@ Streamlit tabanlı, tek sayfa (SPA benzeri) çok modüllü bir analiz aracı. Ü
 
 Harici bir LLM/AI API'sine bağımlılık yoktur — tüm "akıllı" analizler (CV değerlendirme,
 duygu analizi) kural/sözlük tabanlı sezgisel yöntemlerle yapılır; sadece çalışan kaybı
-(attrition) tahmini gerçek bir ML modeli (scikit-learn RandomForest) kullanır.
+(attrition) tahmini gerçek bir ML modeli (LightGBM, cross-validation ile optimize edilmiş
+hiperparametrelerle) kullanır.
 
 ## Özellikler
 
 - **📁 Dataset Analizi**
   - Genel amaçlı veri keşfi ve görselleştirme (herhangi bir yüklenen veri setinde çalışır)
   - Veri seti dahili İK şemasına uyuyorsa ek alt modüller açılır:
-    - **Çalışan Kaybı Tahmini** — RandomForest ile risk skoru, SHAP açıklamaları
+    - **Çalışan Kaybı Tahmini** — LightGBM ile risk skoru, SHAP açıklamaları
     - **Performans Analizi**
     - **Maaş / Kariyer Analizi**
     - **Aksiyon Merkezi** — SHAP katkılarını Türkçe İK aksiyon önerilerine çevirir
@@ -31,7 +32,7 @@ Her panelin sonucu JSON / PDF / CSV olarak dışa aktarılabilir.
 - **Dil:** Python 3.13
 - **UI:** Streamlit
 - **Veri işleme:** pandas, numpy
-- **ML:** scikit-learn (RandomForest), SHAP (açıklanabilirlik)
+- **ML:** scikit-learn (pipeline/CV) + LightGBM (gradient boosting), SHAP (açıklanabilirlik)
 - **Görselleştirme:** Plotly
 - **Dosya I/O:** openpyxl, pypdf, python-docx, fpdf2 (Türkçe karakter destekli PDF export)
 - **Web scraping:** requests, BeautifulSoup4

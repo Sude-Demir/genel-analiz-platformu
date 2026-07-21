@@ -4,15 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Proje Özeti
 
-"Analiz Platformu" — Streamlit tabanlı, tek sayfa (SPA benzeri) çok modüllü bir analiz aracı. Üç ana panel içerir: Dataset Analizi (genel + İK'ya özgü alt modüller), CV Analizi, Şirket Analizi (web/sosyal medya duygu analizi). Tüm UI metinleri, kolon adları ve kod içi yorumlar Türkçedir. Harici bir LLM/AI API'sine bağımlılık yoktur — tüm "akıllı" analizler (CV değerlendirme, duygu analizi) kural/sözlük tabanlı sezgisel yöntemlerle yapılır; sadece çalışan kaybı (attrition) tahmini gerçek bir ML modeli (scikit-learn RandomForest) kullanır.
+"Analiz Platformu" — Streamlit tabanlı, tek sayfa (SPA benzeri) çok modüllü bir analiz aracı. Üç ana panel içerir: Dataset Analizi (genel + İK'ya özgü alt modüller), CV Analizi, Şirket Analizi (web/sosyal medya duygu analizi). Tüm UI metinleri, kolon adları ve kod içi yorumlar Türkçedir. Harici bir LLM/AI API'sine bağımlılık yoktur — tüm "akıllı" analizler (CV değerlendirme, duygu analizi) kural/sözlük tabanlı sezgisel yöntemlerle yapılır; sadece çalışan kaybı (attrition) tahmini gerçek bir ML modeli (LightGBM, cross-validation ile optimize edilmiş hiperparametrelerle) kullanır.
 
-Bu bir git deposu değildir (henüz `git init` yapılmamış).
+Bu bir git deposudur ve GitHub'a bağlıdır (https://github.com/Sude-Demir/genel-analiz-platformu).
 
 ## Sık Kullanılan Komutlar
 
 ```bash
 # Bağımlılıkları kur (venv/ zaten mevcut)
-pip install -r requirements.txt
+pip install -r requirements.lock   # kilitli, doğrulanmış sürümler (önerilen)
+# pip install -r requirements.txt  # veya gevşek sürüm aralıklarıyla
 
 # Ham İK verisini işleyip Türkçeleştirir: data/raw/HR-Employee-Attrition.csv -> data/employees.csv
 python src/data_prep.py
@@ -23,9 +24,12 @@ python src/model.py
 
 # Uygulamayı başlatır
 streamlit run app/Home.py
+
+# Test paketini çalıştırır (tests/ altında pytest ile)
+python -m pytest tests/ -v
 ```
 
-Test suite veya lint konfigürasyonu (pytest, flake8, ruff vb.) bulunmamaktadır.
+Lint konfigürasyonu (flake8, ruff vb.) bulunmamaktadır.
 
 ## Mimari
 
@@ -40,7 +44,7 @@ Streamlit'in çoklu-sayfa (multipage) gezinmesi **kullanılmaz**. Bunun yerine t
 
 ### İki ayrı modelleme yolu (kasıtlı olarak birbirinden bağımsız)
 
-1. **`src/model.py`** — yalnızca dahili İK veri setine (`data/employees.csv`) özel, sabit kodlanmış Türkçe kolon listeleri (`NUMERIC_FEATURES`, `CATEGORICAL_FEATURES`) kullanan RandomForestClassifier. `models/attrition_model.joblib` içine `{pipeline, numeric_features, categorical_features}` olarak kaydedilir.
+1. **`src/model.py`** — yalnızca dahili İK veri setine (`data/employees.csv`) özel, sabit kodlanmış Türkçe kolon listeleri (`NUMERIC_FEATURES`, `CATEGORICAL_FEATURES`) kullanan LGBMClassifier (LightGBM). `train()`, `RandomizedSearchCV` + `StratifiedKFold` ile hiperparametre araması yapar. `models/attrition_model.joblib` içine `{pipeline, numeric_features, categorical_features}` olarak kaydedilir.
 2. **`src/auto_model.py`** — kullanıcının yüklediği **herhangi bir** veri setinde, kolon tiplerini çalışma zamanında algılayıp (`infer_column_types`) sınıflandırma/regresyon görevini otomatik seçen (`detect_task_type`) genel amaçlı model eğitici. Bu ikisi kasıtlı olarak ayrı tutulmuştur — attrition modeline özgü mantığı genelleştirmeye çalışma.
 
 Her iki yol da SHAP `TreeExplainer` ile açıklanabilirlik sağlar; SHAP değerleri pozitif sınıfa (attrition="Evet" / sınıflandırmada kod=1) göre yorumlanır.
@@ -57,7 +61,7 @@ Her iki yol da SHAP `TreeExplainer` ile açıklanabilirlik sağlar; SHAP değerl
 data/raw/HR-Employee-Attrition.csv (orijinal, İngilizce kolonlar)
   → src/data_prep.py (COLUMN_MAP + VALUE_MAP ile Türkçeleştirir)
   → data/employees.csv (Türkçe kolon adları/değerleri, uygulamanın "dahili İK veri seti" seçeneği)
-  → src/model.py (RandomForest eğitir)
+  → src/model.py (LightGBM eğitir, RandomizedSearchCV ile hiperparametre araması yapar)
   → models/attrition_model.joblib
 ```
 

@@ -1,7 +1,14 @@
 import numpy as np
 import pandas as pd
+from lightgbm import LGBMClassifier
 
-from model import CATEGORICAL_FEATURES, NUMERIC_FEATURES, build_pipeline
+from model import (
+    CATEGORICAL_FEATURES,
+    NUMERIC_FEATURES,
+    build_explainer,
+    build_pipeline,
+    explain_batch,
+)
 
 
 def _synthetic_frame(n=20, seed=42):
@@ -36,3 +43,21 @@ def test_pipeline_handles_unknown_category():
     X_yeni.loc[0, CATEGORICAL_FEATURES[0]] = "EGITIMDE_OLMAYAN_DEGER"
     # OneHotEncoder(handle_unknown="ignore") sayesinde hata fırlatmamalı
     pipeline.predict(X_yeni)
+
+
+def test_pipeline_uses_lightgbm():
+    pipeline = build_pipeline()
+    assert isinstance(pipeline.named_steps["model"], LGBMClassifier)
+
+
+def test_shap_explainer_works_with_lightgbm():
+    X = _synthetic_frame(n=40)
+    y = pd.Series([0, 1] * (len(X) // 2))
+    pipeline = build_pipeline()
+    pipeline.fit(X, y)
+
+    explainer = build_explainer(pipeline)
+    shap_df = explain_batch(pipeline, explainer, X)
+
+    assert shap_df.shape[0] == len(X)
+    assert not shap_df.isna().any().any()
