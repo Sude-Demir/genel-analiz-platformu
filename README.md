@@ -21,7 +21,9 @@ hiperparametrelerle) kullanır.
     - **Maaş / Kariyer Analizi**
     - **Aksiyon Merkezi** — SHAP katkılarını Türkçe İK aksiyon önerilerine çevirir
     - **Auto Model** — herhangi bir veri setinde otomatik sınıflandırma/regresyon modeli eğitir
-- **📄 CV Analizi** — regex + anahtar kelime sözlükleriyle beceri/pozisyon/eğitim çıkarımı
+- **📄 CV Analizi** — regex + anahtar kelime sözlükleriyle beceri/pozisyon/eğitim çıkarımı;
+  ayrıca bir iş ilanı metnine karşı CV'yi eşleştirip uygunluk yüzdesi ve eksik/eşleşen
+  beceri listesi üretir
 - **🌐 Şirket Analizi** — Google News RSS + DuckDuckGo araması üzerinden haber/başlık toplama,
   sözlük tabanlı duygu analizi ve öne çıkan konu çıkarımı
 

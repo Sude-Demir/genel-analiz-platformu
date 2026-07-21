@@ -1,11 +1,12 @@
 """CV Analizi paneli — CV yükleme, bilgi çıkarımı, güçlü/zayıf yön özeti, pozisyon önerisi."""
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
-from cv_analysis import analyze_cv, extract_text
+from cv_analysis import analyze_cv, extract_text, match_cv_to_job
 from export_utils import build_pdf, to_json_bytes
-from theme import CATEGORICAL, apply_layout
+from theme import CATEGORICAL, STATUS, apply_layout, risk_status
 
 
 def render():
@@ -70,6 +71,82 @@ def render():
         st.dataframe(pd.DataFrame(result["position_suggestions"]), width="stretch", hide_index=True)
     else:
         st.info("Yeterli beceri anahtar kelimesi bulunamadığı için pozisyon önerisi üretilemedi.")
+
+    st.markdown("### 🎯 İlana Göre Eşleştirme")
+    st.caption("Bir iş ilanı metni yapıştırın; CV'deki beceriler ilanla karşılaştırılıp uygunluk yüzdesi hesaplanır.")
+    job_text = st.text_area("İş ilanı metni", height=150, key="cv_job_text")
+
+    match = None
+    if job_text.strip():
+        match = match_cv_to_job(st.session_state["cv_text"], job_text)
+        if match["match_pct"] is None:
+            st.warning("İlan metninde tanınan beceri anahtar kelimesi bulunamadı.")
+        else:
+            status = risk_status(1 - match["match_pct"] / 100)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Uygunluk Skoru", f"%{match['match_pct']}")
+            c2.metric("Eşleşen Beceri", len(match["matched_skills"]))
+            c3.metric("Eksik Beceri", len(match["missing_skills"]))
+
+            fig = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=match["match_pct"],
+                number={"suffix": "%"},
+                gauge={"axis": {"range": [0, 100]}, "bar": {"color": STATUS[status]}},
+            ))
+            apply_layout(fig)
+            st.plotly_chart(fig, width="stretch")
+
+            left, right = st.columns(2)
+            with left:
+                st.markdown("**✅ Eşleşen Beceriler**")
+                st.write(", ".join(match["matched_skills"]) if match["matched_skills"] else "—")
+            with right:
+                st.markdown("**❌ Eksik Beceriler**")
+                st.write(", ".join(match["missing_skills"]) if match["missing_skills"] else "—")
+
+            if match["required_experience"] is not None:
+                if match["candidate_experience"] is not None:
+                    durum = "✅ Karşılıyor" if match["experience_met"] else "⚠️ Karşılamıyor"
+                    st.caption(
+                        f"Deneyim: ilan {match['required_experience']} yıl istiyor, "
+                        f"aday ~{match['candidate_experience']} yıl — {durum}"
+                    )
+                else:
+                    st.caption(f"Deneyim: ilan {match['required_experience']} yıl istiyor, adayın deneyimi CV'de net değil.")
+
+            if match["group_breakdown"]:
+                breakdown_df = pd.DataFrame(match["group_breakdown"])
+                fig2 = px.bar(
+                    breakdown_df, x="İlan Beceri Sayısı", y="Alan", orientation="h",
+                    color_discrete_sequence=[CATEGORICAL[0]],
+                )
+                fig2.add_bar(
+                    x=breakdown_df["Eşleşen"], y=breakdown_df["Alan"], orientation="h",
+                    name="Eşleşen", marker_color=CATEGORICAL[1],
+                )
+                apply_layout(fig2, barmode="overlay", showlegend=False)
+                st.plotly_chart(fig2, width="stretch")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.download_button(
+                    "JSON indir", data=to_json_bytes(match),
+                    file_name=f"{file_name}_ilan_eslesme.json", mime="application/json", key="cv_match_json",
+                )
+            with c2:
+                match_blocks = [
+                    {"heading": "Uygunluk Skoru", "type": "paragraph", "content": f"%{match['match_pct']}"},
+                    {"heading": "Eşleşen Beceriler", "type": "bullets", "content": match["matched_skills"] or ["—"]},
+                    {"heading": "Eksik Beceriler", "type": "bullets", "content": match["missing_skills"] or ["—"]},
+                ]
+                pdf_bytes = build_pdf(f"İlan Eşleştirme Raporu — {file_name}", match_blocks)
+                st.download_button(
+                    "PDF indir", data=pdf_bytes,
+                    file_name=f"{file_name}_ilan_eslesme.pdf", mime="application/pdf", key="cv_match_pdf",
+                )
+    else:
+        st.info("Eşleştirme sonucu görmek için yukarıya bir ilan metni yapıştırın.")
 
     st.markdown("### Dışa Aktar")
     c1, c2 = st.columns(2)

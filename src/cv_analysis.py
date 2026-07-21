@@ -215,6 +215,57 @@ def analyze_cv(text: str) -> dict:
     }
 
 
+def match_cv_to_job(cv_text: str, job_text: str) -> dict:
+    """Bir CV'yi belirli bir iş ilanı metnine göre eşleştirir.
+
+    İlan ve CV aynı SKILL_GROUPS sözlüğüyle taranır; ortak/eksik beceriler ve
+    ilanın istediği deneyim ile adayın tahmini deneyimi karşılaştırılır.
+    """
+    job_lower = job_text.lower()
+    cv_lower = cv_text.lower()
+
+    job_skills_by_group = find_skills(job_lower)
+    cv_skills_by_group = find_skills(cv_lower)
+
+    job_skills = sorted({kw for kws in job_skills_by_group.values() for kw in kws})
+    cv_skills = sorted({kw for kws in cv_skills_by_group.values() for kw in kws})
+
+    matched_skills = sorted(set(job_skills) & set(cv_skills))
+    missing_skills = sorted(set(job_skills) - set(cv_skills))
+    match_pct = round(len(matched_skills) / len(job_skills) * 100) if job_skills else None
+
+    group_breakdown = []
+    for group, job_kws in job_skills_by_group.items():
+        cv_kws = set(cv_skills_by_group.get(group, []))
+        job_kw_set = set(job_kws)
+        group_breakdown.append({
+            "Alan": group,
+            "İlan Beceri Sayısı": len(job_kw_set),
+            "Eşleşen": len(job_kw_set & cv_kws),
+        })
+    group_breakdown.sort(key=lambda r: r["İlan Beceri Sayısı"], reverse=True)
+
+    required_experience = estimate_experience_years(job_text, job_lower)
+    candidate_experience = estimate_experience_years(cv_text, cv_lower)
+    experience_met = (
+        candidate_experience >= required_experience
+        if required_experience is not None and candidate_experience is not None
+        else None
+    )
+
+    return {
+        "job_skills": job_skills,
+        "cv_skills": cv_skills,
+        "matched_skills": matched_skills,
+        "missing_skills": missing_skills,
+        "match_pct": match_pct,
+        "required_experience": required_experience,
+        "candidate_experience": candidate_experience,
+        "experience_met": experience_met,
+        "group_breakdown": group_breakdown,
+    }
+
+
 def build_report(file_name: str, result: dict) -> str:
     lines = [f"# CV Analiz Raporu — {file_name}", ""]
     lines.append("## İletişim Bilgileri")
