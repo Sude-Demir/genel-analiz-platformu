@@ -1,4 +1,26 @@
-from cv_analysis import match_cv_to_job
+from cv_analysis import analyze_cv, match_cv_to_job, turkish_lower
+
+
+def test_turkish_lower_handles_dotted_capital_i():
+    # Standart str.lower() 'İ'yi 'i' + birleşik nokta işaretine çevirir (U+0307);
+    # bu satır o hatanın düzeltildiğini doğrular.
+    assert turkish_lower("İşe Alım") == "işe alım"
+    assert turkish_lower("İNGİLİZCE") == "ingilizce"
+
+
+def test_turkish_lower_leaves_plain_i_untouched():
+    # Düz "I" kasıtlı olarak dokunulmaz: "Power BI" gibi İngilizce kısaltmalar
+    # "ı" değil "i" anlamına gelir (bkz. turkish_lower docstring).
+    assert turkish_lower("Power BI") == "power bi"
+
+
+def test_analyze_cv_detects_skills_starting_with_capital_i():
+    cv = "İşe alım ve İnsan Kaynakları alanında 5 yıllık deneyimim var."
+    result = analyze_cv(cv)
+
+    all_skills = {kw for kws in result["skills"].values() for kw in kws}
+    assert "işe alım" in all_skills
+    assert "insan kaynakları" in all_skills
 
 
 def test_match_full_overlap():

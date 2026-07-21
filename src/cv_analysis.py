@@ -86,6 +86,22 @@ EDUCATION_LEVELS: dict[str, list[str]] = {
 
 STRONG_GROUP_THRESHOLD = 3
 
+_TURKISH_UPPER_MAP = str.maketrans("İ", "i")
+
+
+def turkish_lower(text: str) -> str:
+    """Türkçe büyük "İ" harfini doğru küçültür.
+
+    Standart str.lower(), "İ"yi tek bir "i" yerine "i" + görünmez birleşik
+    nokta işaretine (U+0307) çevirir; bu da "İşe", "İnsan Kaynakları" gibi
+    İ ile başlayan kelimelerin anahtar kelime eşleşmesinde kaçırılmasına yol
+    açar. Düz "I" harfine kasıtlı olarak dokunulmaz: Türkçe kelimelerde "ı"
+    anlamına gelse de, CV/ilan metinlerinde sık geçen "Power BI", "UI/UX",
+    "AI" gibi İngilizce kısaltmalarda "i" anlamına gelir — iki anlamlı
+    olduğundan standart (İngilizce) davranışta bırakılır.
+    """
+    return text.translate(_TURKISH_UPPER_MAP).lower()
+
 
 def extract_text(uploaded_file) -> str:
     """Yüklenen PDF/DOCX/TXT dosyasından düz metin çıkarır."""
@@ -138,7 +154,7 @@ def detect_education(text_lower: str) -> str | None:
 
 
 def analyze_cv(text: str) -> dict:
-    text_lower = text.lower()
+    text_lower = turkish_lower(text)
     contact = extract_contact(text)
     skills = find_skills(text_lower)
     all_skills = sorted({kw for kws in skills.values() for kw in kws})
@@ -221,8 +237,8 @@ def match_cv_to_job(cv_text: str, job_text: str) -> dict:
     İlan ve CV aynı SKILL_GROUPS sözlüğüyle taranır; ortak/eksik beceriler ve
     ilanın istediği deneyim ile adayın tahmini deneyimi karşılaştırılır.
     """
-    job_lower = job_text.lower()
-    cv_lower = cv_text.lower()
+    job_lower = turkish_lower(job_text)
+    cv_lower = turkish_lower(cv_text)
 
     job_skills_by_group = find_skills(job_lower)
     cv_skills_by_group = find_skills(cv_lower)

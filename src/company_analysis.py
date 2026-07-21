@@ -17,6 +17,13 @@ from bs4 import BeautifulSoup
 REQUEST_TIMEOUT = 8
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnalizPlatformu/1.0"}
 
+_TURKISH_UPPER_MAP = str.maketrans("İ", "i")
+
+
+def turkish_lower(text: str) -> str:
+    """Türkçe İ/I harflerini doğru küçültür (bkz. cv_analysis.turkish_lower)."""
+    return text.translate(_TURKISH_UPPER_MAP).lower()
+
 POSITIVE_WORDS = {
     "harika", "mükemmel", "memnun", "memnuniyet", "kaliteli", "hızlı", "güvenilir",
     "teşekkür", "başarılı", "iyi", "tavsiye", "beğendim", "profesyonel", "keyifli",
@@ -123,7 +130,7 @@ def collect_mentions(company: str) -> tuple[list[dict], list[str]]:
 
 
 def analyze_sentiment(text: str) -> tuple[str, int]:
-    text_lower = text.lower()
+    text_lower = turkish_lower(text)
     words = re.findall(r"[a-zçğıöşü]+", text_lower)
     pos = sum(1 for w in words if w in POSITIVE_WORDS)
     neg = sum(1 for w in words if w in NEGATIVE_WORDS)
@@ -136,12 +143,12 @@ def analyze_sentiment(text: str) -> tuple[str, int]:
 
 
 def extract_topics(texts: list[str], company: str, top_n: int = 15) -> list[tuple[str, int]]:
-    company_tokens = {w.lower() for w in re.findall(r"[a-zçğıöşü]+", company.lower())}
+    company_tokens = {turkish_lower(w) for w in re.findall(r"[a-zçğıöşü]+", turkish_lower(company))}
     counter: Counter = Counter()
     for text in texts:
         words = re.findall(r"[a-zçğıöşüA-ZÇĞİÖŞÜ]{3,}", text)
         for w in words:
-            wl = w.lower()
+            wl = turkish_lower(w)
             if wl in STOPWORDS or wl in company_tokens:
                 continue
             counter[wl] += 1
