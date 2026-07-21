@@ -30,7 +30,7 @@ def render(emp: pd.DataFrame):
             color=counts.index.astype(str), color_discrete_sequence=ramp,
         )
         apply_layout(fig, showlegend=False)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     with right:
         st.subheader("Departmana Göre Ortalama Performans")
@@ -43,7 +43,7 @@ def render(emp: pd.DataFrame):
         )
         fig.update_xaxes(range=[0, 4])
         apply_layout(fig, showlegend=False)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     st.divider()
     st.subheader("İş Tatmini ile Performans İlişkisi")
@@ -56,7 +56,7 @@ def render(emp: pd.DataFrame):
     fig.update_xaxes(dtick=1, range=[0.5, 4.5])
     fig.update_yaxes(dtick=1, range=[0.5, 4.5])
     apply_layout(fig, showlegend=False)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
 
     st.divider()
     st.subheader("Pozisyona Göre Ortalama Performans (En İyi 10)")
@@ -72,7 +72,7 @@ def render(emp: pd.DataFrame):
         color_discrete_sequence=[CATEGORICAL[4]],
     )
     apply_layout(fig, showlegend=False)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
 
     st.markdown("### Dışa Aktar")
     summary = {

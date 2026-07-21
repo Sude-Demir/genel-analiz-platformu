@@ -99,7 +99,7 @@ def render(emp: pd.DataFrame, pipeline, explainer):
         fig.add_trace(go.Bar(name="Önce", x=["Grup Ortalaması"], y=[before.mean() * 100], marker_color=STATUS["critical"]))
         fig.add_trace(go.Bar(name="Sonra", x=["Grup Ortalaması"], y=[after.mean() * 100], marker_color=STATUS["good"]))
         apply_layout(fig, yaxis_title="Risk (%)")
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
 
         st.markdown("### Dışa Aktar")
         scenario_result = {

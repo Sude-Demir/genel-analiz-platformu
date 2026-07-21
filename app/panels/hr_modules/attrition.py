@@ -27,7 +27,7 @@ def render(emp: pd.DataFrame, pipeline, explainer):
             color_discrete_sequence=[CATEGORICAL[0]],
         )
         apply_layout(fig, showlegend=False)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
         st.caption(
             "Model: LightGBM (Gradient Boosting) sınıflandırıcı, IBM HR Analytics Employee Attrition veri seti üzerinde eğitildi."
         )
@@ -88,7 +88,7 @@ def render(emp: pd.DataFrame, pipeline, explainer):
             title={"text": "Ayrılma Olasılığı"},
         ))
         apply_layout(fig, height=320)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
 
         status_labels = {"good": "Düşük Risk", "warning": "Orta Risk", "serious": "Yüksek Risk", "critical": "Kritik Risk"}
         st.markdown(f"**Durum:** :{'green' if status=='good' else 'orange' if status in ('warning','serious') else 'red'}[{status_labels[status]}]")
@@ -105,7 +105,7 @@ def render(emp: pd.DataFrame, pipeline, explainer):
                 marker_color=colors,
             ))
             apply_layout(fig3, showlegend=False, xaxis_title="Risk Skoruna Etkisi (SHAP)")
-            st.plotly_chart(fig3, width="stretch")
+            st.plotly_chart(fig3, width="stretch", theme=None)
 
         st.markdown("### Dışa Aktar")
         result = {

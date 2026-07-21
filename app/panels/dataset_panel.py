@@ -48,7 +48,7 @@ def _render_general_stats(df: pd.DataFrame, name: str):
         for col in secilen_num:
             fig = px.histogram(df, x=col, color_discrete_sequence=[CATEGORICAL[0]])
             apply_layout(fig, showlegend=False)
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, width="stretch", theme=None)
 
     if categorical_cols:
         st.markdown("**Kategorik Kolon Dağılımları**")
@@ -61,7 +61,7 @@ def _render_general_stats(df: pd.DataFrame, name: str):
                 color_discrete_sequence=[CATEGORICAL[1]],
             )
             apply_layout(fig, showlegend=False)
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, width="stretch", theme=None)
 
     corr = None
     if len(numeric_cols) >= 2:
@@ -69,7 +69,7 @@ def _render_general_stats(df: pd.DataFrame, name: str):
         corr = df[numeric_cols].corr()
         fig = px.imshow(corr, color_continuous_scale=SEQUENTIAL_BLUE, zmin=-1, zmax=1)
         apply_layout(fig)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     st.markdown("### Dışa Aktar")
     c1, c2, c3 = st.columns(3)

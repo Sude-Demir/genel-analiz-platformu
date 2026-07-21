@@ -64,7 +64,7 @@ def render(df: pd.DataFrame, state_prefix: str):
         color_discrete_sequence=[CATEGORICAL[0]],
     )
     apply_layout(fig, showlegend=False)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
 
     explanation_row = None
     if result["task_type"] == "regression" or result.get("n_classes") == 2:
@@ -82,7 +82,7 @@ def render(df: pd.DataFrame, state_prefix: str):
         fig2 = px.bar(top, x=top.values, y=top.index, orientation="h", labels={"x": "Katkı", "y": ""})
         fig2.update_traces(marker_color=colors)
         apply_layout(fig2, showlegend=False)
-        st.plotly_chart(fig2, width="stretch")
+        st.plotly_chart(fig2, width="stretch", theme=None)
         explanation_row = {"satir_index": str(row_idx), "shap_katkilari": top.to_dict()}
     else:
         st.caption("Not: SHAP açıklaması şu an sadece regresyon ve iki sınıflı (binary) sınıflandırma için gösteriliyor.")

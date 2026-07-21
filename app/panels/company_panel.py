@@ -60,14 +60,14 @@ def render():
             labels={"x": "Duygu", "y": "Kaynak Sayısı"},
         )
         apply_layout(fig, showlegend=False)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
     with right:
         st.markdown("**Öne Çıkan Konular**")
         if topics:
             topic_df = pd.DataFrame(topics, columns=["Konu", "Frekans"]).sort_values("Frekans")
             fig = px.bar(topic_df, x="Frekans", y="Konu", orientation="h", color_discrete_sequence=[CATEGORICAL[4]])
             apply_layout(fig, showlegend=False)
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, width="stretch", theme=None)
         else:
             st.info("Öne çıkan konu tespit edilemedi.")
 

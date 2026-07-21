@@ -52,7 +52,7 @@ def render():
         st.dataframe(skill_df, width="stretch", hide_index=True)
         fig = px.bar(skill_df.sort_values("Adet"), x="Adet", y="Alan", orientation="h", color_discrete_sequence=[CATEGORICAL[0]])
         apply_layout(fig, showlegend=False)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
     else:
         st.info("Beceri anahtar kelimesi tespit edilemedi.")
 
@@ -95,7 +95,7 @@ def render():
                 gauge={"axis": {"range": [0, 100]}, "bar": {"color": STATUS[status]}},
             ))
             apply_layout(fig)
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, width="stretch", theme=None)
 
             left, right = st.columns(2)
             with left:
@@ -126,7 +126,7 @@ def render():
                     name="Eşleşen", marker_color=CATEGORICAL[1],
                 )
                 apply_layout(fig2, barmode="overlay", showlegend=False)
-                st.plotly_chart(fig2, width="stretch")
+                st.plotly_chart(fig2, width="stretch", theme=None)
 
             c1, c2 = st.columns(2)
             with c1:

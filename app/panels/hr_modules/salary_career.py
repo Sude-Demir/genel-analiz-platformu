@@ -24,7 +24,7 @@ def render(emp: pd.DataFrame):
             color="Departman", color_discrete_sequence=CATEGORICAL,
         )
         apply_layout(fig, showlegend=False)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     with right:
         st.subheader("Kademeye Göre Aylık Gelir Dağılımı")
@@ -35,7 +35,7 @@ def render(emp: pd.DataFrame):
         )
         fig.update_xaxes(dtick=1)
         apply_layout(fig, showlegend=False)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     st.divider()
     left2, right2 = st.columns(2)
@@ -48,7 +48,7 @@ def render(emp: pd.DataFrame):
             color_discrete_sequence=CATEGORICAL, opacity=0.7,
         )
         apply_layout(fig)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     with right2:
         st.subheader("Son Terfiden Beri Geçen Yıl Dağılımı")
@@ -59,7 +59,7 @@ def render(emp: pd.DataFrame):
         )
         fig.update_yaxes(title="Çalışan Sayısı")
         apply_layout(fig, showlegend=False)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     st.divider()
     st.subheader("Kademeye Göre Ortalama Hisse Opsiyonu Seviyesi")
@@ -71,7 +71,7 @@ def render(emp: pd.DataFrame):
     )
     fig.update_xaxes(dtick=1)
     apply_layout(fig, showlegend=False)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
 
     st.markdown("### Dışa Aktar")
     summary = {
