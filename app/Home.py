@@ -31,9 +31,11 @@ if "active_panel" not in st.session_state:
     st.session_state["active_panel"] = "dataset"
 
 with st.sidebar:
-    st.markdown("## 🧪 Analiz Platformu")
-    st.caption("Genel amaçlı çok modüllü analiz aracı")
-    st.divider()
+    with st.container(border=True):
+        st.markdown("## 🧪 Analiz Platformu")
+        st.caption("Genel amaçlı çok modüllü analiz aracı")
+
+    st.write("")
     for key, panel in PANELS.items():
         is_active = st.session_state["active_panel"] == key
         if st.button(panel["label"], key=f"nav_{key}", type="primary" if is_active else "secondary", width="stretch"):

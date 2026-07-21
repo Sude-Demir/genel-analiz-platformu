@@ -20,17 +20,18 @@ def render(emp: pd.DataFrame, pipeline, explainer):
 
     with tab1:
         st.subheader("Modeli Etkileyen En Önemli Faktörler")
-        importances = get_feature_importances(pipeline).head(15).sort_values()
-        fig = px.bar(
-            importances, x=importances.values, y=importances.index, orientation="h",
-            labels={"x": "Önem Derecesi", "y": ""},
-            color_discrete_sequence=[CATEGORICAL[0]],
-        )
-        apply_layout(fig, showlegend=False)
-        st.plotly_chart(fig, width="stretch", theme=None)
-        st.caption(
-            "Model: LightGBM (Gradient Boosting) sınıflandırıcı, IBM HR Analytics Employee Attrition veri seti üzerinde eğitildi."
-        )
+        with st.container(border=True):
+            importances = get_feature_importances(pipeline).head(15).sort_values()
+            fig = px.bar(
+                importances, x=importances.values, y=importances.index, orientation="h",
+                labels={"x": "Önem Derecesi", "y": ""},
+                color_discrete_sequence=[CATEGORICAL[0]],
+            )
+            apply_layout(fig, showlegend=False)
+            st.plotly_chart(fig, width="stretch", theme=None)
+            st.caption(
+                "Model: LightGBM (Gradient Boosting) sınıflandırıcı, IBM HR Analytics Employee Attrition veri seti üzerinde eğitildi."
+            )
 
     with tab2:
         st.subheader("Varsayımsal Çalışan İçin Risk Skoru Hesapla")
@@ -71,41 +72,42 @@ def render(emp: pd.DataFrame, pipeline, explainer):
         prob = pipeline.predict_proba(input_row)[0, 1]
         status = risk_status(prob)
 
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=prob * 100,
-            number={"suffix": "%"},
-            gauge={
-                "axis": {"range": [0, 100]},
-                "bar": {"color": STATUS[status]},
-                "steps": [
-                    {"range": [0, 25], "color": "#f0efec"},
-                    {"range": [25, 50], "color": "#f5e6c8"},
-                    {"range": [50, 75], "color": "#f7dccb"},
-                    {"range": [75, 100], "color": "#f6d3d3"},
-                ],
-            },
-            title={"text": "Ayrılma Olasılığı"},
-        ))
-        apply_layout(fig, height=320)
-        st.plotly_chart(fig, width="stretch", theme=None)
-
-        status_labels = {"good": "Düşük Risk", "warning": "Orta Risk", "serious": "Yüksek Risk", "critical": "Kritik Risk"}
-        st.markdown(f"**Durum:** :{'green' if status=='good' else 'orange' if status in ('warning','serious') else 'red'}[{status_labels[status]}]")
-
-        contributions = None
-        if explainer is not None:
-            st.subheader("Bu Tahmini Etkileyen Faktörler")
-            contributions = explain_instance(pipeline, explainer, input_row)
-            top_idx = contributions.abs().sort_values(ascending=False).head(8).index
-            top_contrib = contributions[top_idx].sort_values()
-            colors = [STATUS["critical"] if v > 0 else STATUS["good"] for v in top_contrib.values]
-            fig3 = go.Figure(go.Bar(
-                x=top_contrib.values, y=top_contrib.index, orientation="h",
-                marker_color=colors,
+        with st.container(border=True):
+            fig = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=prob * 100,
+                number={"suffix": "%"},
+                gauge={
+                    "axis": {"range": [0, 100]},
+                    "bar": {"color": STATUS[status]},
+                    "steps": [
+                        {"range": [0, 25], "color": "#f0efec"},
+                        {"range": [25, 50], "color": "#f5e6c8"},
+                        {"range": [50, 75], "color": "#f7dccb"},
+                        {"range": [75, 100], "color": "#f6d3d3"},
+                    ],
+                },
+                title={"text": "Ayrılma Olasılığı"},
             ))
-            apply_layout(fig3, showlegend=False, xaxis_title="Risk Skoruna Etkisi (SHAP)")
-            st.plotly_chart(fig3, width="stretch", theme=None)
+            apply_layout(fig, height=320)
+            st.plotly_chart(fig, width="stretch", theme=None)
+
+            status_labels = {"good": "Düşük Risk", "warning": "Orta Risk", "serious": "Yüksek Risk", "critical": "Kritik Risk"}
+            st.markdown(f"**Durum:** :{'green' if status=='good' else 'orange' if status in ('warning','serious') else 'red'}[{status_labels[status]}]")
+
+            contributions = None
+            if explainer is not None:
+                st.subheader("Bu Tahmini Etkileyen Faktörler")
+                contributions = explain_instance(pipeline, explainer, input_row)
+                top_idx = contributions.abs().sort_values(ascending=False).head(8).index
+                top_contrib = contributions[top_idx].sort_values()
+                colors = [STATUS["critical"] if v > 0 else STATUS["good"] for v in top_contrib.values]
+                fig3 = go.Figure(go.Bar(
+                    x=top_contrib.values, y=top_contrib.index, orientation="h",
+                    marker_color=colors,
+                ))
+                apply_layout(fig3, showlegend=False, xaxis_title="Risk Skoruna Etkisi (SHAP)")
+                st.plotly_chart(fig3, width="stretch", theme=None)
 
         st.markdown("### Dışa Aktar")
         result = {
@@ -134,10 +136,11 @@ def render(emp: pd.DataFrame, pipeline, explainer):
         st.subheader("Mevcut Çalışanlar Arasında En Yüksek Riskli 20 Kişi")
         top_risk = emp.sort_values("RiskSkoru", ascending=False).head(20)
         display_cols = ["CalisanID", "Departman", "Pozisyon", "SirketteKidemYili", "IsTatmini", "RiskSkoru"]
-        st.dataframe(
-            top_risk[display_cols].style.format({"RiskSkoru": "{:.1%}"}),
-            width="stretch", hide_index=True,
-        )
+        with st.container(border=True):
+            st.dataframe(
+                top_risk[display_cols].style.format({"RiskSkoru": "{:.1%}"}),
+                width="stretch", hide_index=True,
+            )
         c1, c2 = st.columns(2)
         with c1:
             st.download_button(

@@ -42,34 +42,35 @@ def render():
 
     st.success(f"'{company_name}' için {len(df)} kaynak bulundu.")
 
-    counts = df["duygu"].value_counts()
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Toplam Kaynak", len(df))
-    c2.metric("Pozitif", int(counts.get("Pozitif", 0)))
-    c3.metric("Nötr", int(counts.get("Nötr", 0)))
-    c4.metric("Negatif", int(counts.get("Negatif", 0)))
+    with st.container(border=True):
+        counts = df["duygu"].value_counts()
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Toplam Kaynak", len(df))
+        c2.metric("Pozitif", int(counts.get("Pozitif", 0)))
+        c3.metric("Nötr", int(counts.get("Nötr", 0)))
+        c4.metric("Negatif", int(counts.get("Negatif", 0)))
 
-    left, right = st.columns(2)
-    with left:
-        st.markdown("**Duygu Dağılımı**")
-        sentiment_colors = {"Pozitif": STATUS["good"], "Nötr": MUTED, "Negatif": STATUS["critical"]}
-        order = [s for s in ["Pozitif", "Nötr", "Negatif"] if s in counts.index]
-        fig = px.bar(
-            x=order, y=[counts[s] for s in order],
-            color=order, color_discrete_map=sentiment_colors,
-            labels={"x": "Duygu", "y": "Kaynak Sayısı"},
-        )
-        apply_layout(fig, showlegend=False)
-        st.plotly_chart(fig, width="stretch", theme=None)
-    with right:
-        st.markdown("**Öne Çıkan Konular**")
-        if topics:
-            topic_df = pd.DataFrame(topics, columns=["Konu", "Frekans"]).sort_values("Frekans")
-            fig = px.bar(topic_df, x="Frekans", y="Konu", orientation="h", color_discrete_sequence=[CATEGORICAL[4]])
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**Duygu Dağılımı**")
+            sentiment_colors = {"Pozitif": STATUS["good"], "Nötr": MUTED, "Negatif": STATUS["critical"]}
+            order = [s for s in ["Pozitif", "Nötr", "Negatif"] if s in counts.index]
+            fig = px.bar(
+                x=order, y=[counts[s] for s in order],
+                color=order, color_discrete_map=sentiment_colors,
+                labels={"x": "Duygu", "y": "Kaynak Sayısı"},
+            )
             apply_layout(fig, showlegend=False)
             st.plotly_chart(fig, width="stretch", theme=None)
-        else:
-            st.info("Öne çıkan konu tespit edilemedi.")
+        with right:
+            st.markdown("**Öne Çıkan Konular**")
+            if topics:
+                topic_df = pd.DataFrame(topics, columns=["Konu", "Frekans"]).sort_values("Frekans")
+                fig = px.bar(topic_df, x="Frekans", y="Konu", orientation="h", color_discrete_sequence=[CATEGORICAL[4]])
+                apply_layout(fig, showlegend=False)
+                st.plotly_chart(fig, width="stretch", theme=None)
+            else:
+                st.info("Öne çıkan konu tespit edilemedi.")
 
     st.markdown("### Kaynaklar")
     st.dataframe(

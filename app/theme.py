@@ -1,4 +1,11 @@
-"""Uygulama genelinde kullanılan renk paleti (dataviz skill referans paletinden)."""
+"""Uygulama genelinde kullanılan renk paleti (dataviz skill referans paletinden).
+
+Grafik veri renkleri (CATEGORICAL/SEQUENTIAL_BLUE/STATUS) CVD-güvenli olarak
+doğrulanmıştır ve temaya göre değişmez. Grafik "chrome" renkleri (arkaplan,
+ızgara, metin) aktif Streamlit temasına (açık/koyu, bkz. .streamlit/config.toml)
+göre otomatik seçilir.
+"""
+import streamlit as st
 
 CATEGORICAL = [
     "#2a78d6",  # blue
@@ -20,25 +27,47 @@ STATUS = {
     "critical": "#d03b3b",
 }
 
-GRID = "#e1e0d9"
-BASELINE = "#c3c2b7"
-MUTED = "#898781"
-TEXT_SECONDARY = "#52514e"
-TEXT_PRIMARY = "#0b0b0b"
-SURFACE = "#fcfcfb"
+MUTED = "#898781"  # eksen/etiket rengi; açık ve koyu temada aynı
 
-PLOTLY_LAYOUT = dict(
-    plot_bgcolor=SURFACE,
-    paper_bgcolor=SURFACE,
-    font=dict(color=TEXT_PRIMARY, family="system-ui, -apple-system, Segoe UI, sans-serif"),
-    xaxis=dict(gridcolor=GRID, linecolor=BASELINE, zerolinecolor=BASELINE, automargin=True),
-    yaxis=dict(gridcolor=GRID, linecolor=BASELINE, zerolinecolor=BASELINE, automargin=True),
-    margin=dict(l=10, r=10, t=40, b=10),
-)
+_CHROME = {
+    "light": {
+        "surface": "#fcfcfb",
+        "grid": "#e1e0d9",
+        "baseline": "#c3c2b7",
+        "text_primary": "#0b0b0b",
+    },
+    "dark": {
+        "surface": "#1a1a19",
+        "grid": "#2c2c2a",
+        "baseline": "#383835",
+        "text_primary": "#ffffff",
+    },
+}
+
+
+def get_theme_type() -> str:
+    """Kullanıcının aktif Streamlit temasını döndürür ("light" veya "dark")."""
+    try:
+        theme_type = st.context.theme.type
+    except Exception:
+        theme_type = None
+    return theme_type or "light"
+
+
+def _build_plotly_layout(theme_type: str) -> dict:
+    chrome = _CHROME[theme_type]
+    return dict(
+        plot_bgcolor=chrome["surface"],
+        paper_bgcolor=chrome["surface"],
+        font=dict(color=chrome["text_primary"], family="system-ui, -apple-system, Segoe UI, sans-serif"),
+        xaxis=dict(gridcolor=chrome["grid"], linecolor=chrome["baseline"], zerolinecolor=chrome["baseline"], automargin=True),
+        yaxis=dict(gridcolor=chrome["grid"], linecolor=chrome["baseline"], zerolinecolor=chrome["baseline"], automargin=True),
+        margin=dict(l=10, r=10, t=40, b=10),
+    )
 
 
 def apply_layout(fig, **overrides):
-    layout = {**PLOTLY_LAYOUT, **overrides}
+    layout = {**_build_plotly_layout(get_theme_type()), **overrides}
     fig.update_layout(**layout)
     return fig
 

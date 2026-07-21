@@ -36,13 +36,14 @@ def render():
     file_name = st.session_state["cv_name"]
     st.success(f"Analiz edilen dosya: **{file_name}**")
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Tahmini Deneyim", f"{result['experience_years']} yıl" if result["experience_years"] else "—")
-    c2.metric("Eğitim Düzeyi", result["education"] or "—")
-    c3.metric("Tespit Edilen Beceri Sayısı", len(result["all_skills"]))
+    with st.container(border=True):
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Tahmini Deneyim", f"{result['experience_years']} yıl" if result["experience_years"] else "—")
+        c2.metric("Eğitim Düzeyi", result["education"] or "—")
+        c3.metric("Tespit Edilen Beceri Sayısı", len(result["all_skills"]))
 
-    st.markdown("**İletişim Bilgileri**")
-    st.write(f"E-posta: {result['contact']['email'] or 'Tespit edilemedi'} | Telefon: {result['contact']['phone'] or 'Tespit edilemedi'}")
+        st.markdown("**İletişim Bilgileri**")
+        st.write(f"E-posta: {result['contact']['email'] or 'Tespit edilemedi'} | Telefon: {result['contact']['phone'] or 'Tespit edilemedi'}")
 
     st.markdown("### Tespit Edilen Beceriler")
     skill_rows = []
@@ -82,51 +83,52 @@ def render():
         if match["match_pct"] is None:
             st.warning("İlan metninde tanınan beceri anahtar kelimesi bulunamadı.")
         else:
-            status = risk_status(1 - match["match_pct"] / 100)
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Uygunluk Skoru", f"%{match['match_pct']}")
-            c2.metric("Eşleşen Beceri", len(match["matched_skills"]))
-            c3.metric("Eksik Beceri", len(match["missing_skills"]))
+            with st.container(border=True):
+                status = risk_status(1 - match["match_pct"] / 100)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Uygunluk Skoru", f"%{match['match_pct']}")
+                c2.metric("Eşleşen Beceri", len(match["matched_skills"]))
+                c3.metric("Eksik Beceri", len(match["missing_skills"]))
 
-            fig = go.Figure(go.Indicator(
-                mode="gauge+number",
-                value=match["match_pct"],
-                number={"suffix": "%"},
-                gauge={"axis": {"range": [0, 100]}, "bar": {"color": STATUS[status]}},
-            ))
-            apply_layout(fig)
-            st.plotly_chart(fig, width="stretch", theme=None)
+                fig = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=match["match_pct"],
+                    number={"suffix": "%"},
+                    gauge={"axis": {"range": [0, 100]}, "bar": {"color": STATUS[status]}},
+                ))
+                apply_layout(fig)
+                st.plotly_chart(fig, width="stretch", theme=None)
 
-            left, right = st.columns(2)
-            with left:
-                st.markdown("**✅ Eşleşen Beceriler**")
-                st.write(", ".join(match["matched_skills"]) if match["matched_skills"] else "—")
-            with right:
-                st.markdown("**❌ Eksik Beceriler**")
-                st.write(", ".join(match["missing_skills"]) if match["missing_skills"] else "—")
+                left, right = st.columns(2)
+                with left:
+                    st.markdown("**✅ Eşleşen Beceriler**")
+                    st.write(", ".join(match["matched_skills"]) if match["matched_skills"] else "—")
+                with right:
+                    st.markdown("**❌ Eksik Beceriler**")
+                    st.write(", ".join(match["missing_skills"]) if match["missing_skills"] else "—")
 
-            if match["required_experience"] is not None:
-                if match["candidate_experience"] is not None:
-                    durum = "✅ Karşılıyor" if match["experience_met"] else "⚠️ Karşılamıyor"
-                    st.caption(
-                        f"Deneyim: ilan {match['required_experience']} yıl istiyor, "
-                        f"aday ~{match['candidate_experience']} yıl — {durum}"
+                if match["required_experience"] is not None:
+                    if match["candidate_experience"] is not None:
+                        durum = "✅ Karşılıyor" if match["experience_met"] else "⚠️ Karşılamıyor"
+                        st.caption(
+                            f"Deneyim: ilan {match['required_experience']} yıl istiyor, "
+                            f"aday ~{match['candidate_experience']} yıl — {durum}"
+                        )
+                    else:
+                        st.caption(f"Deneyim: ilan {match['required_experience']} yıl istiyor, adayın deneyimi CV'de net değil.")
+
+                if match["group_breakdown"]:
+                    breakdown_df = pd.DataFrame(match["group_breakdown"])
+                    fig2 = px.bar(
+                        breakdown_df, x="İlan Beceri Sayısı", y="Alan", orientation="h",
+                        color_discrete_sequence=[CATEGORICAL[0]],
                     )
-                else:
-                    st.caption(f"Deneyim: ilan {match['required_experience']} yıl istiyor, adayın deneyimi CV'de net değil.")
-
-            if match["group_breakdown"]:
-                breakdown_df = pd.DataFrame(match["group_breakdown"])
-                fig2 = px.bar(
-                    breakdown_df, x="İlan Beceri Sayısı", y="Alan", orientation="h",
-                    color_discrete_sequence=[CATEGORICAL[0]],
-                )
-                fig2.add_bar(
-                    x=breakdown_df["Eşleşen"], y=breakdown_df["Alan"], orientation="h",
-                    name="Eşleşen", marker_color=CATEGORICAL[1],
-                )
-                apply_layout(fig2, barmode="overlay", showlegend=False)
-                st.plotly_chart(fig2, width="stretch", theme=None)
+                    fig2.add_bar(
+                        x=breakdown_df["Eşleşen"], y=breakdown_df["Alan"], orientation="h",
+                        name="Eşleşen", marker_color=CATEGORICAL[1],
+                    )
+                    apply_layout(fig2, barmode="overlay", showlegend=False)
+                    st.plotly_chart(fig2, width="stretch", theme=None)
 
             c1, c2 = st.columns(2)
             with c1:

@@ -45,45 +45,47 @@ def render(df: pd.DataFrame, state_prefix: str):
         return
 
     metrics = result["metrics"]
-    if result["task_type"] == "classification":
-        m1, m2 = st.columns(2)
-        m1.metric("Doğruluk (Accuracy)", f"{metrics['accuracy']:.1%}")
-        m2.metric("ROC-AUC", f"{metrics['roc_auc']:.3f}" if metrics["roc_auc"] is not None else "—")
-    else:
-        m1, m2 = st.columns(2)
-        m1.metric("R²", f"{metrics['r2']:.3f}")
-        m2.metric("RMSE", f"{metrics['rmse']:.2f}")
+    with st.container(border=True):
+        if result["task_type"] == "classification":
+            m1, m2 = st.columns(2)
+            m1.metric("Doğruluk (Accuracy)", f"{metrics['accuracy']:.1%}")
+            m2.metric("ROC-AUC", f"{metrics['roc_auc']:.3f}" if metrics["roc_auc"] is not None else "—")
+        else:
+            m1, m2 = st.columns(2)
+            m1.metric("R²", f"{metrics['r2']:.3f}")
+            m2.metric("RMSE", f"{metrics['rmse']:.2f}")
 
-    st.markdown("**Özellik Önem Sırası**")
-    importances = get_feature_importances(
-        result["pipeline"], result["categorical_features"], result["numeric_features"]
-    ).head(15).sort_values()
-    fig = px.bar(
-        importances, x=importances.values, y=importances.index, orientation="h",
-        labels={"x": "Önem Derecesi", "y": ""},
-        color_discrete_sequence=[CATEGORICAL[0]],
-    )
-    apply_layout(fig, showlegend=False)
-    st.plotly_chart(fig, width="stretch", theme=None)
+        st.markdown("**Özellik Önem Sırası**")
+        importances = get_feature_importances(
+            result["pipeline"], result["categorical_features"], result["numeric_features"]
+        ).head(15).sort_values()
+        fig = px.bar(
+            importances, x=importances.values, y=importances.index, orientation="h",
+            labels={"x": "Önem Derecesi", "y": ""},
+            color_discrete_sequence=[CATEGORICAL[0]],
+        )
+        apply_layout(fig, showlegend=False)
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     explanation_row = None
     if result["task_type"] == "regression" or result.get("n_classes") == 2:
-        st.markdown("**Tekil Satır İçin SHAP Açıklaması**")
-        row_idx = st.selectbox("Açıklanacak satır (index)", df.index[:200], key=f"{state_prefix}_row_idx")
-        X_row = df.loc[[row_idx], result["categorical_features"] + result["numeric_features"]]
+        with st.container(border=True):
+            st.markdown("**Tekil Satır İçin SHAP Açıklaması**")
+            row_idx = st.selectbox("Açıklanacak satır (index)", df.index[:200], key=f"{state_prefix}_row_idx")
+            X_row = df.loc[[row_idx], result["categorical_features"] + result["numeric_features"]]
 
-        explainer = shap.TreeExplainer(result["pipeline"].named_steps["model"])
-        contrib = explain_batch(
-            result["pipeline"], explainer, X_row,
-            result["categorical_features"], result["numeric_features"],
-        ).iloc[0]
-        top = contrib.reindex(contrib.abs().sort_values(ascending=False).index).head(10).sort_values()
-        colors = ["#d03b3b" if v > 0 else "#0ca30c" for v in top.values]
-        fig2 = px.bar(top, x=top.values, y=top.index, orientation="h", labels={"x": "Katkı", "y": ""})
-        fig2.update_traces(marker_color=colors)
-        apply_layout(fig2, showlegend=False)
-        st.plotly_chart(fig2, width="stretch", theme=None)
-        explanation_row = {"satir_index": str(row_idx), "shap_katkilari": top.to_dict()}
+            explainer = shap.TreeExplainer(result["pipeline"].named_steps["model"])
+            contrib = explain_batch(
+                result["pipeline"], explainer, X_row,
+                result["categorical_features"], result["numeric_features"],
+            ).iloc[0]
+            top = contrib.reindex(contrib.abs().sort_values(ascending=False).index).head(10).sort_values()
+            colors = ["#d03b3b" if v > 0 else "#0ca30c" for v in top.values]
+            fig2 = px.bar(top, x=top.values, y=top.index, orientation="h", labels={"x": "Katkı", "y": ""})
+            fig2.update_traces(marker_color=colors)
+            apply_layout(fig2, showlegend=False)
+            st.plotly_chart(fig2, width="stretch", theme=None)
+            explanation_row = {"satir_index": str(row_idx), "shap_katkilari": top.to_dict()}
     else:
         st.caption("Not: SHAP açıklaması şu an sadece regresyon ve iki sınıflı (binary) sınıflandırma için gösteriliyor.")
 

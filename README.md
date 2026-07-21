@@ -29,6 +29,13 @@ hiperparametrelerle) kullanır.
 
 Her panelin sonucu JSON / PDF / CSV olarak dışa aktarılabilir.
 
+## Tema
+
+`.streamlit/config.toml` açık ve koyu tema tanımlarını içerir (sağ üstteki ayarlar
+menüsünden geçiş yapılabilir). Grafikler (`app/theme.py`) aktif temayı
+`st.context.theme.type` ile algılayıp uygun renk setini otomatik seçer; grafik veri
+renkleri (kategorik/durum paleti) CVD-güvenli olduğu için temadan bağımsız sabit kalır.
+
 ## Teknoloji Yığını
 
 - **Dil:** Python 3.13

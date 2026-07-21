@@ -27,7 +27,8 @@ def render(emp: pd.DataFrame, pipeline, explainer):
             st.info("Bu eşiği aşan çalışan yok.")
         elif explainer is None:
             rows_df = at_risk[["CalisanID", "Departman", "Pozisyon", "RiskSkoru"]]
-            st.dataframe(rows_df.style.format({"RiskSkoru": "{:.1%}"}), width="stretch", hide_index=True)
+            with st.container(border=True):
+                st.dataframe(rows_df.style.format({"RiskSkoru": "{:.1%}"}), width="stretch", hide_index=True)
         else:
             display_n = min(len(at_risk), 30)
             subset = at_risk.head(display_n)
@@ -44,9 +45,10 @@ def render(emp: pd.DataFrame, pipeline, explainer):
                     "Önerilen Aksiyonlar": " • ".join(suggestions) if suggestions else "Belirgin bir aksiyon önerisi yok",
                 })
             rows_df = pd.DataFrame(rows)
-            st.dataframe(rows_df.style.format({"RiskSkoru": "{:.1%}"}), width="stretch", hide_index=True)
-            if len(at_risk) > display_n:
-                st.caption(f"Performans nedeniyle en riskli {display_n} çalışan gösteriliyor (toplam {len(at_risk)}).")
+            with st.container(border=True):
+                st.dataframe(rows_df.style.format({"RiskSkoru": "{:.1%}"}), width="stretch", hide_index=True)
+                if len(at_risk) > display_n:
+                    st.caption(f"Performans nedeniyle en riskli {display_n} çalışan gösteriliyor (toplam {len(at_risk)}).")
 
         if rows_df is not None:
             st.markdown("### Dışa Aktar")
@@ -90,16 +92,17 @@ def render(emp: pd.DataFrame, pipeline, explainer):
         X_after = apply_scenario(X_group, salary_increase_pct=zam, remove_overtime=mesai_kaldir, improve_wlb=wlb_iyilestir)
         after = pipeline.predict_proba(X_after)[:, 1]
 
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Ortalama Risk (Önce)", f"{before.mean():.1%}")
-        m2.metric("Ortalama Risk (Sonra)", f"{after.mean():.1%}", delta=f"{(after.mean() - before.mean()):+.1%}", delta_color="inverse")
-        m3.metric("Yüksek Riskten Çıkan Kişi Sayısı", int(((before >= 0.5) & (after < 0.5)).sum()))
+        with st.container(border=True):
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Ortalama Risk (Önce)", f"{before.mean():.1%}")
+            m2.metric("Ortalama Risk (Sonra)", f"{after.mean():.1%}", delta=f"{(after.mean() - before.mean()):+.1%}", delta_color="inverse")
+            m3.metric("Yüksek Riskten Çıkan Kişi Sayısı", int(((before >= 0.5) & (after < 0.5)).sum()))
 
-        fig = go.Figure()
-        fig.add_trace(go.Bar(name="Önce", x=["Grup Ortalaması"], y=[before.mean() * 100], marker_color=STATUS["critical"]))
-        fig.add_trace(go.Bar(name="Sonra", x=["Grup Ortalaması"], y=[after.mean() * 100], marker_color=STATUS["good"]))
-        apply_layout(fig, yaxis_title="Risk (%)")
-        st.plotly_chart(fig, width="stretch", theme=None)
+            fig = go.Figure()
+            fig.add_trace(go.Bar(name="Önce", x=["Grup Ortalaması"], y=[before.mean() * 100], marker_color=STATUS["critical"]))
+            fig.add_trace(go.Bar(name="Sonra", x=["Grup Ortalaması"], y=[after.mean() * 100], marker_color=STATUS["good"]))
+            apply_layout(fig, yaxis_title="Risk (%)")
+            st.plotly_chart(fig, width="stretch", theme=None)
 
         st.markdown("### Dışa Aktar")
         scenario_result = {
@@ -135,18 +138,19 @@ def render(emp: pd.DataFrame, pipeline, explainer):
         X_row = row[CATEGORICAL_FEATURES + NUMERIC_FEATURES]
         current_risk = pipeline.predict_proba(X_row)[0, 1]
 
-        st.metric("Mevcut Risk Skoru", f"{current_risk:.1%}")
+        with st.container(border=True):
+            st.metric("Mevcut Risk Skoru", f"{current_risk:.1%}")
 
-        suggestions = []
-        if explainer is not None:
-            contrib = explain_instance(pipeline, explainer, X_row)
-            suggestions = suggest_actions(contrib)
-            if suggestions:
-                st.markdown("**Önerilen Aksiyonlar:**")
-                for s in suggestions:
-                    st.markdown(f"- {s}")
-            else:
-                st.info("Belirgin bir aksiyon önerisi yok.")
+            suggestions = []
+            if explainer is not None:
+                contrib = explain_instance(pipeline, explainer, X_row)
+                suggestions = suggest_actions(contrib)
+                if suggestions:
+                    st.markdown("**Önerilen Aksiyonlar:**")
+                    for s in suggestions:
+                        st.markdown(f"- {s}")
+                else:
+                    st.info("Belirgin bir aksiyon önerisi yok.")
 
         st.markdown("---")
         st.markdown("**Müdahaleyi Simüle Et**")
@@ -161,10 +165,11 @@ def render(emp: pd.DataFrame, pipeline, explainer):
         X_after2 = apply_scenario(X_row, salary_increase_pct=zam2, remove_overtime=mesai_kaldir2, improve_wlb=wlb2)
         new_risk = pipeline.predict_proba(X_after2)[0, 1]
 
-        st.metric(
-            "Simülasyon Sonrası Risk Skoru", f"{new_risk:.1%}",
-            delta=f"{(new_risk - current_risk):+.1%}", delta_color="inverse",
-        )
+        with st.container(border=True):
+            st.metric(
+                "Simülasyon Sonrası Risk Skoru", f"{new_risk:.1%}",
+                delta=f"{(new_risk - current_risk):+.1%}", delta_color="inverse",
+            )
 
         st.markdown("### Dışa Aktar")
         single_result = {

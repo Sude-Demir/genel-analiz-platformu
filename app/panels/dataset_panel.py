@@ -26,50 +26,52 @@ def _load_uploaded(uploaded) -> pd.DataFrame:
 
 def _render_general_stats(df: pd.DataFrame, name: str):
     st.success(f"Aktif veri seti: **{name}** — {len(df)} satır, {len(df.columns)} kolon")
-    st.dataframe(df.head(20), width="stretch")
+    with st.container(border=True):
+        st.dataframe(df.head(20), width="stretch")
 
-    numeric_cols, categorical_cols = infer_column_types(df)
-    st.write(f"**{len(numeric_cols)}** sayısal, **{len(categorical_cols)}** kategorik kolon algılandı.")
+        numeric_cols, categorical_cols = infer_column_types(df)
+        st.write(f"**{len(numeric_cols)}** sayısal, **{len(categorical_cols)}** kategorik kolon algılandı.")
 
-    st.markdown("### Genel İstatistikler")
-    describe_df = df.describe().T
-    st.dataframe(describe_df, width="stretch")
+        st.markdown("### Genel İstatistikler")
+        describe_df = df.describe().T
+        st.dataframe(describe_df, width="stretch")
 
-    missing = df.isna().sum()
-    missing = missing[missing > 0]
-    if not missing.empty:
-        st.markdown("**Eksik Değerler**")
-        st.dataframe(missing.rename("Eksik Sayısı").to_frame(), width="stretch")
+        missing = df.isna().sum()
+        missing = missing[missing > 0]
+        if not missing.empty:
+            st.markdown("**Eksik Değerler**")
+            st.dataframe(missing.rename("Eksik Sayısı").to_frame(), width="stretch")
 
     st.markdown("### Görselleştirmeler")
-    if numeric_cols:
-        st.markdown("**Sayısal Kolon Dağılımları**")
-        secilen_num = st.multiselect("Kolon seç", numeric_cols, default=numeric_cols[:4], key="ds_num_cols")
-        for col in secilen_num:
-            fig = px.histogram(df, x=col, color_discrete_sequence=[CATEGORICAL[0]])
-            apply_layout(fig, showlegend=False)
-            st.plotly_chart(fig, width="stretch", theme=None)
+    with st.container(border=True):
+        if numeric_cols:
+            st.markdown("**Sayısal Kolon Dağılımları**")
+            secilen_num = st.multiselect("Kolon seç", numeric_cols, default=numeric_cols[:4], key="ds_num_cols")
+            for col in secilen_num:
+                fig = px.histogram(df, x=col, color_discrete_sequence=[CATEGORICAL[0]])
+                apply_layout(fig, showlegend=False)
+                st.plotly_chart(fig, width="stretch", theme=None)
 
-    if categorical_cols:
-        st.markdown("**Kategorik Kolon Dağılımları**")
-        secilen_cat = st.multiselect("Kolon seç", categorical_cols, default=categorical_cols[:4], key="ds_cat_cols")
-        for col in secilen_cat:
-            counts = df[col].astype(str).value_counts().head(15)
-            fig = px.bar(
-                x=counts.index, y=counts.values,
-                labels={"x": col, "y": "Adet"},
-                color_discrete_sequence=[CATEGORICAL[1]],
-            )
-            apply_layout(fig, showlegend=False)
-            st.plotly_chart(fig, width="stretch", theme=None)
+        if categorical_cols:
+            st.markdown("**Kategorik Kolon Dağılımları**")
+            secilen_cat = st.multiselect("Kolon seç", categorical_cols, default=categorical_cols[:4], key="ds_cat_cols")
+            for col in secilen_cat:
+                counts = df[col].astype(str).value_counts().head(15)
+                fig = px.bar(
+                    x=counts.index, y=counts.values,
+                    labels={"x": col, "y": "Adet"},
+                    color_discrete_sequence=[CATEGORICAL[1]],
+                )
+                apply_layout(fig, showlegend=False)
+                st.plotly_chart(fig, width="stretch", theme=None)
 
-    corr = None
-    if len(numeric_cols) >= 2:
-        st.markdown("**Korelasyon Matrisi**")
-        corr = df[numeric_cols].corr()
-        fig = px.imshow(corr, color_continuous_scale=SEQUENTIAL_BLUE, zmin=-1, zmax=1)
-        apply_layout(fig)
-        st.plotly_chart(fig, width="stretch", theme=None)
+        corr = None
+        if len(numeric_cols) >= 2:
+            st.markdown("**Korelasyon Matrisi**")
+            corr = df[numeric_cols].corr()
+            fig = px.imshow(corr, color_continuous_scale=SEQUENTIAL_BLUE, zmin=-1, zmax=1)
+            apply_layout(fig)
+            st.plotly_chart(fig, width="stretch", theme=None)
 
     st.markdown("### Dışa Aktar")
     c1, c2, c3 = st.columns(3)
