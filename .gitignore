@@ -1,0 +1,18 @@
+# Sanal ortam
+venv/
+
+# Python derleme çıktıları
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data prep ve model eğitimi ile üretilen dosyalar (script'ler ile yeniden oluşturulabilir)
+data/employees.csv
+models/*.joblib
+
+# Yerel çalışma zamanı çıktıları
+streamlit_run.log
+.streamlit/
+
+# Eski elle alınmış yedek klasörü (artık git tutuyor)
+_backup_pre_spa_20260720_172845/
