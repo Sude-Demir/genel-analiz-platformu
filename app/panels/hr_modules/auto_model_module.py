@@ -20,6 +20,73 @@ from export_utils import build_pdf, to_json_bytes
 from theme import CATEGORICAL, apply_layout
 
 
+def render_manual_prediction(df: pd.DataFrame, result: dict, state_prefix: str):
+    """Eğitilmiş otomatik modele elle girilen tek bir satır için tahmin alır.
+
+    `result`, `train_auto_model()` çıktısıdır (bkz. `auto_model.py`). Kategorik özellikler
+    için veri setindeki benzersiz değerlerden seçim, sayısal özellikler için medyan varsayılanlı
+    giriş kutuları üretilir; ardından `result["pipeline"]` ile tahmin yapılır.
+    """
+    st.subheader("Elle Veri Girerek Tahmin Al")
+
+    categorical_features = result["categorical_features"]
+    numeric_features = result["numeric_features"]
+
+    overrides = {}
+    cols = st.columns(3) if (categorical_features or numeric_features) else []
+    fields = list(categorical_features) + list(numeric_features)
+    for i, col in enumerate(fields):
+        target_col_widget = cols[i % 3] if cols else st
+        with target_col_widget:
+            if col in categorical_features:
+                options = df[col].dropna().unique()
+                overrides[col] = st.selectbox(col, options, key=f"{state_prefix}_manual_{col}")
+            else:
+                default_val = float(df[col].median()) if df[col].notna().any() else 0.0
+                overrides[col] = st.number_input(col, value=default_val, key=f"{state_prefix}_manual_{col}")
+
+    input_row = pd.DataFrame([overrides])[categorical_features + numeric_features]
+
+    if st.button("Tahmin Et", type="primary", key=f"{state_prefix}_manual_predict_btn"):
+        pipeline = result["pipeline"]
+        with st.container(border=True):
+            if result["task_type"] == "classification":
+                pred_code = pipeline.predict(input_row)[0]
+                proba = pipeline.predict_proba(input_row)[0]
+                class_labels = result.get("class_labels")
+                if class_labels:
+                    # pred_code, hedef kategorikse cat-kod (0..n-1), sayısalsa ham değerdir;
+                    # her iki durumda da classes_ içindeki konumu class_labels'taki karşılığını verir.
+                    classes_ = list(pipeline.named_steps["model"].classes_)
+                    pred_label = class_labels[classes_.index(pred_code)]
+                else:
+                    pred_label = pred_code
+                st.metric(f"Tahmin Edilen {result['target_col']}", str(pred_label))
+                if result.get("n_classes") == 2:
+                    st.caption(f"Pozitif sınıf olasılığı: %{proba[1] * 100:.1f}")
+                else:
+                    proba_df = pd.DataFrame({
+                        "Sınıf": class_labels if class_labels else list(range(len(proba))),
+                        "Olasılık": proba,
+                    }).sort_values("Olasılık", ascending=False)
+                    st.dataframe(proba_df.style.format({"Olasılık": "{:.1%}"}), width="stretch", hide_index=True)
+            else:
+                pred_value = pipeline.predict(input_row)[0]
+                st.metric(f"Tahmin Edilen {result['target_col']}", f"{pred_value:.2f}")
+
+            if result["task_type"] == "regression" or result.get("n_classes") == 2:
+                explainer = shap.TreeExplainer(pipeline.named_steps["model"])
+                contrib = explain_batch(
+                    pipeline, explainer, input_row, categorical_features, numeric_features,
+                ).iloc[0]
+                top = contrib.reindex(contrib.abs().sort_values(ascending=False).index).head(8).sort_values()
+                colors = ["#d03b3b" if v > 0 else "#0ca30c" for v in top.values]
+                fig = px.bar(top, x=top.values, y=top.index, orientation="h", labels={"x": "Katkı", "y": ""})
+                fig.update_traces(marker_color=colors)
+                apply_layout(fig, showlegend=False)
+                st.plotly_chart(fig, width="stretch", theme=None)
+
+
 def render(df: pd.DataFrame, state_prefix: str):
     st.subheader("Otomatik Model Eğitimi ve Açıklama")
     st.caption("Seçtiğiniz hedef kolona göre otomatik bir sınıflandırma/regresyon modeli eğitir.")
@@ -66,6 +133,8 @@ def render(df: pd.DataFrame, state_prefix: str):
         )
         apply_layout(fig, showlegend=False)
         st.plotly_chart(fig, width="stretch", theme=None)
+
+    render_manual_prediction(df, result, state_prefix)
 
     explanation_row = None
     if result["task_type"] == "regression" or result.get("n_classes") == 2:

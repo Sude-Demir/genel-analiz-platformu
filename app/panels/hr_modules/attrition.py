@@ -11,6 +11,111 @@ from model import CATEGORICAL_FEATURES, NUMERIC_FEATURES, explain_instance, get_
 from theme import CATEGORICAL, STATUS, apply_layout, risk_status
 
 
+def render_risk_calculator(emp: pd.DataFrame, pipeline, explainer, key_prefix: str = "attr"):
+    """Varsayımsal/gerçek bir çalışan için elle veri girip anlık risk skoru tahmini alınan form.
+
+    Hem Dataset Analizi panelindeki "Çalışan Kaybı Tahmini" alt modülünden hem de öne çıkan
+    Tahmin panelinden çağrılır (tek kaynak, `key_prefix` ile widget anahtar çakışması önlenir).
+    """
+    st.subheader("Varsayımsal Çalışan İçin Risk Skoru Hesapla")
+
+    defaults = {}
+    for col in NUMERIC_FEATURES:
+        defaults[col] = float(emp[col].median())
+    for col in CATEGORICAL_FEATURES:
+        defaults[col] = emp[col].mode()[0]
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        departman = st.selectbox("Departman", emp["Departman"].unique(), key=f"{key_prefix}_dept")
+        pozisyon_options = emp[emp["Departman"] == departman]["Pozisyon"].unique()
+        pozisyon = st.selectbox("Pozisyon", pozisyon_options, key=f"{key_prefix}_pos")
+        overtime = st.selectbox("Fazla Mesai", ["Evet", "Hayır"], key=f"{key_prefix}_ot")
+        medeni = st.selectbox("Medeni Durum", emp["MedeniDurum"].unique(), key=f"{key_prefix}_medeni")
+    with c2:
+        yas = st.slider("Yaş", 18, 60, 32, key=f"{key_prefix}_yas")
+        gelir = st.number_input("Aylık Gelir ($)", 1000, 20000, 5000, step=500, key=f"{key_prefix}_gelir")
+        kidem = st.slider("Şirkette Kıdem (Yıl)", 0, 40, 3, key=f"{key_prefix}_kidem")
+        rol_kidem = st.slider("Mevcut Roldeki Kıdem (Yıl)", 0, 20, 2, key=f"{key_prefix}_rolkidem")
+    with c3:
+        is_tatmini = st.slider("İş Tatmini (1-4)", 1, 4, 3, key=f"{key_prefix}_tatmin")
+        wlb = st.slider("İş-Yaşam Dengesi (1-4)", 1, 4, 3, key=f"{key_prefix}_wlb")
+        mesafe = st.slider("Ev Uzaklığı (km)", 1, 30, 10, key=f"{key_prefix}_mesafe")
+        seyahat = st.selectbox("Seyahat Sıklığı", emp["SeyahatSikligi"].unique(), key=f"{key_prefix}_seyahat")
+
+    overrides = {
+        "Departman": departman, "Pozisyon": pozisyon, "FazlaMesai": overtime,
+        "MedeniDurum": medeni, "SeyahatSikligi": seyahat,
+        "Yas": yas, "AylikGelir": gelir, "SirketteKidemYili": kidem,
+        "MevcutRoldeKidemYili": rol_kidem, "EvUzakligiKm": mesafe,
+        "IsTatmini": is_tatmini, "IsYasamDengesi": wlb,
+    }
+    input_row = pd.DataFrame([{**defaults, **overrides}])[CATEGORICAL_FEATURES + NUMERIC_FEATURES]
+
+    prob = pipeline.predict_proba(input_row)[0, 1]
+    status = risk_status(prob)
+
+    with st.container(border=True):
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=prob * 100,
+            number={"suffix": "%"},
+            gauge={
+                "axis": {"range": [0, 100]},
+                "bar": {"color": STATUS[status]},
+                "steps": [
+                    {"range": [0, 25], "color": "#f0efec"},
+                    {"range": [25, 50], "color": "#f5e6c8"},
+                    {"range": [50, 75], "color": "#f7dccb"},
+                    {"range": [75, 100], "color": "#f6d3d3"},
+                ],
+            },
+            title={"text": "Ayrılma Olasılığı"},
+        ))
+        apply_layout(fig, height=320)
+        st.plotly_chart(fig, width="stretch", theme=None)
+
+        status_labels = {"good": "Düşük Risk", "warning": "Orta Risk", "serious": "Yüksek Risk", "critical": "Kritik Risk"}
+        st.markdown(f"**Durum:** :{'green' if status=='good' else 'orange' if status in ('warning','serious') else 'red'}[{status_labels[status]}]")
+
+        contributions = None
+        if explainer is not None:
+            st.subheader("Bu Tahmini Etkileyen Faktörler")
+            contributions = explain_instance(pipeline, explainer, input_row)
+            top_idx = contributions.abs().sort_values(ascending=False).head(8).index
+            top_contrib = contributions[top_idx].sort_values()
+            colors = [STATUS["critical"] if v > 0 else STATUS["good"] for v in top_contrib.values]
+            fig3 = go.Figure(go.Bar(
+                x=top_contrib.values, y=top_contrib.index, orientation="h",
+                marker_color=colors,
+            ))
+            apply_layout(fig3, showlegend=False, xaxis_title="Risk Skoruna Etkisi (SHAP)")
+            st.plotly_chart(fig3, width="stretch", theme=None)
+
+    st.markdown("### Dışa Aktar")
+    result = {
+        "girdi": overrides,
+        "risk_skoru": float(prob),
+        "durum": status_labels[status],
+        "en_etkili_faktorler": contributions.abs().sort_values(ascending=False).head(8).to_dict() if contributions is not None else None,
+    }
+    c1, c2 = st.columns(2)
+    with c1:
+        st.download_button(
+            "JSON indir", data=to_json_bytes(result),
+            file_name="risk_skoru_sonucu.json", mime="application/json", key=f"{key_prefix}_json",
+        )
+    with c2:
+        pdf_bytes = build_pdf("Çalışan Kaybı Risk Skoru Raporu", [
+            {"heading": "Girdi", "type": "table", "content": (["Alan", "Değer"], list(overrides.items()))},
+            {"heading": "Sonuç", "type": "paragraph", "content": f"Risk Skoru: %{prob*100:.1f} — Durum: {status_labels[status]}"},
+        ])
+        st.download_button(
+            "PDF indir", data=pdf_bytes,
+            file_name="risk_skoru_raporu.pdf", mime="application/pdf", key=f"{key_prefix}_pdf",
+        )
+
+
 def render(emp: pd.DataFrame, pipeline, explainer):
     X_all = emp[CATEGORICAL_FEATURES + NUMERIC_FEATURES]
     emp = emp.copy()
@@ -34,103 +139,7 @@ def render(emp: pd.DataFrame, pipeline, explainer):
             )
 
     with tab2:
-        st.subheader("Varsayımsal Çalışan İçin Risk Skoru Hesapla")
-
-        defaults = {}
-        for col in NUMERIC_FEATURES:
-            defaults[col] = float(emp[col].median())
-        for col in CATEGORICAL_FEATURES:
-            defaults[col] = emp[col].mode()[0]
-
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            departman = st.selectbox("Departman", emp["Departman"].unique(), key="attr_dept")
-            pozisyon_options = emp[emp["Departman"] == departman]["Pozisyon"].unique()
-            pozisyon = st.selectbox("Pozisyon", pozisyon_options, key="attr_pos")
-            overtime = st.selectbox("Fazla Mesai", ["Evet", "Hayır"], key="attr_ot")
-            medeni = st.selectbox("Medeni Durum", emp["MedeniDurum"].unique(), key="attr_medeni")
-        with c2:
-            yas = st.slider("Yaş", 18, 60, 32, key="attr_yas")
-            gelir = st.number_input("Aylık Gelir ($)", 1000, 20000, 5000, step=500, key="attr_gelir")
-            kidem = st.slider("Şirkette Kıdem (Yıl)", 0, 40, 3, key="attr_kidem")
-            rol_kidem = st.slider("Mevcut Roldeki Kıdem (Yıl)", 0, 20, 2, key="attr_rolkidem")
-        with c3:
-            is_tatmini = st.slider("İş Tatmini (1-4)", 1, 4, 3, key="attr_tatmin")
-            wlb = st.slider("İş-Yaşam Dengesi (1-4)", 1, 4, 3, key="attr_wlb")
-            mesafe = st.slider("Ev Uzaklığı (km)", 1, 30, 10, key="attr_mesafe")
-            seyahat = st.selectbox("Seyahat Sıklığı", emp["SeyahatSikligi"].unique(), key="attr_seyahat")
-
-        overrides = {
-            "Departman": departman, "Pozisyon": pozisyon, "FazlaMesai": overtime,
-            "MedeniDurum": medeni, "SeyahatSikligi": seyahat,
-            "Yas": yas, "AylikGelir": gelir, "SirketteKidemYili": kidem,
-            "MevcutRoldeKidemYili": rol_kidem, "EvUzakligiKm": mesafe,
-            "IsTatmini": is_tatmini, "IsYasamDengesi": wlb,
-        }
-        input_row = pd.DataFrame([{**defaults, **overrides}])[CATEGORICAL_FEATURES + NUMERIC_FEATURES]
-
-        prob = pipeline.predict_proba(input_row)[0, 1]
-        status = risk_status(prob)
-
-        with st.container(border=True):
-            fig = go.Figure(go.Indicator(
-                mode="gauge+number",
-                value=prob * 100,
-                number={"suffix": "%"},
-                gauge={
-                    "axis": {"range": [0, 100]},
-                    "bar": {"color": STATUS[status]},
-                    "steps": [
-                        {"range": [0, 25], "color": "#f0efec"},
-                        {"range": [25, 50], "color": "#f5e6c8"},
-                        {"range": [50, 75], "color": "#f7dccb"},
-                        {"range": [75, 100], "color": "#f6d3d3"},
-                    ],
-                },
-                title={"text": "Ayrılma Olasılığı"},
-            ))
-            apply_layout(fig, height=320)
-            st.plotly_chart(fig, width="stretch", theme=None)
-
-            status_labels = {"good": "Düşük Risk", "warning": "Orta Risk", "serious": "Yüksek Risk", "critical": "Kritik Risk"}
-            st.markdown(f"**Durum:** :{'green' if status=='good' else 'orange' if status in ('warning','serious') else 'red'}[{status_labels[status]}]")
-
-            contributions = None
-            if explainer is not None:
-                st.subheader("Bu Tahmini Etkileyen Faktörler")
-                contributions = explain_instance(pipeline, explainer, input_row)
-                top_idx = contributions.abs().sort_values(ascending=False).head(8).index
-                top_contrib = contributions[top_idx].sort_values()
-                colors = [STATUS["critical"] if v > 0 else STATUS["good"] for v in top_contrib.values]
-                fig3 = go.Figure(go.Bar(
-                    x=top_contrib.values, y=top_contrib.index, orientation="h",
-                    marker_color=colors,
-                ))
-                apply_layout(fig3, showlegend=False, xaxis_title="Risk Skoruna Etkisi (SHAP)")
-                st.plotly_chart(fig3, width="stretch", theme=None)
-
-        st.markdown("### Dışa Aktar")
-        result = {
-            "girdi": overrides,
-            "risk_skoru": float(prob),
-            "durum": status_labels[status],
-            "en_etkili_faktorler": contributions.abs().sort_values(ascending=False).head(8).to_dict() if contributions is not None else None,
-        }
-        c1, c2 = st.columns(2)
-        with c1:
-            st.download_button(
-                "JSON indir", data=to_json_bytes(result),
-                file_name="risk_skoru_sonucu.json", mime="application/json", key="attr_json",
-            )
-        with c2:
-            pdf_bytes = build_pdf("Çalışan Kaybı Risk Skoru Raporu", [
-                {"heading": "Girdi", "type": "table", "content": (["Alan", "Değer"], list(overrides.items()))},
-                {"heading": "Sonuç", "type": "paragraph", "content": f"Risk Skoru: %{prob*100:.1f} — Durum: {status_labels[status]}"},
-            ])
-            st.download_button(
-                "PDF indir", data=pdf_bytes,
-                file_name="risk_skoru_raporu.pdf", mime="application/pdf", key="attr_pdf",
-            )
+        render_risk_calculator(emp, pipeline, explainer, key_prefix="attr")
 
     with tab3:
         st.subheader("Mevcut Çalışanlar Arasında En Yüksek Riskli 20 Kişi")

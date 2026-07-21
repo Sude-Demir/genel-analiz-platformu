@@ -1,4 +1,4 @@
-from cv_analysis import analyze_cv, match_cv_to_job, turkish_lower
+from cv_analysis import analyze_cv, general_score, match_cv_to_job, turkish_lower
 
 
 def test_turkish_lower_handles_dotted_capital_i():
@@ -60,3 +60,25 @@ def test_experience_comparison():
     assert result["required_experience"] == 5
     assert result["candidate_experience"] == 7
     assert result["experience_met"] is True
+
+
+def test_general_score_rewards_more_skills_experience_and_education():
+    junior_cv = "Python biliyorum. Üniversite mezunuyum."
+    senior_cv = (
+        "10 yıllık deneyimim var. Python, SQL, Power BI, Excel, Tableau kullanıyorum. "
+        "Yüksek Lisans mezunuyum."
+    )
+    junior_score = general_score(analyze_cv(junior_cv))
+    senior_score = general_score(analyze_cv(senior_cv))
+
+    assert senior_score > junior_score
+
+
+def test_general_score_handles_missing_experience_and_education():
+    cv = "Python ve SQL biliyorum."
+    result = analyze_cv(cv)
+    assert result["experience_years"] is None
+    assert result["education"] is None
+
+    score = general_score(result)
+    assert score == len(result["all_skills"])

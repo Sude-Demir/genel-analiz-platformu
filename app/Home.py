@@ -17,11 +17,12 @@ for _p in (SRC_DIR, APP_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from panels import company_panel, cv_panel, dataset_panel  # noqa: E402
+from panels import company_panel, cv_panel, dataset_panel, prediction_panel  # noqa: E402
 
 st.set_page_config(page_title="Analiz Platformu", page_icon="🧪", layout="wide")
 
 PANELS = {
+    "predict": {"label": "🔮 Tahmin", "render": prediction_panel.render},
     "dataset": {"label": "📁 Dataset Analizi", "render": dataset_panel.render},
     "cv": {"label": "📄 CV Analizi", "render": cv_panel.render},
     "company": {"label": "🌐 Şirket Analizi", "render": company_panel.render},

@@ -5,11 +5,12 @@ regex desenleri ve alan->pozisyon eşlemesi üzerinden güçlü/zayıf yön öze
 uygun pozisyon önerisi üretir. Bu nedenle sonuçlar bir ön değerlendirme niteliğindedir.
 """
 import io
+import math
 import re
 from collections import Counter
 
+import pdfplumber
 from docx import Document
-from pypdf import PdfReader
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}")
 PHONE_RE = re.compile(r"(?:\+90|0)?[\s.-]?5\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}")
@@ -104,13 +105,29 @@ def turkish_lower(text: str) -> str:
 
 
 def extract_text(uploaded_file) -> str:
-    """Yüklenen PDF/DOCX/TXT dosyasından düz metin çıkarır."""
+    """Yüklenen PDF/DOCX/TXT dosyasından düz metin çıkarır.
+
+    PDF çıkarımı için pypdf yerine pdfplumber kullanılır: pypdf, glifleri tek tek
+    konumlandıran bazı PDF üretim araçlarıyla (örn. Canva) oluşturulmuş dosyalarda
+    her harf arasına boşluk sokarak metni ("S u d e  D e m i r" gibi) bozuyor; bu da
+    anahtar kelime eşleştirmesinin (beceri/deneyim/eğitim tespiti) tamamen başarısız
+    olmasına yol açıyordu. pdfplumber karakter konumlarını dikkate alarak kelimeleri
+    doğru birleştirir.
+
+    Çağrıdan önce (varsa) `seek(0)` yapılır: aynı `UploadedFile` nesnesi birden
+    fazla panel/mod tarafından (örn. Streamlit session_state üzerinden) tekrar
+    okunduğunda, önceki okumadan kalan imleç konumu yüzünden boş metin dönmesini
+    önler.
+    """
+    seek = getattr(uploaded_file, "seek", None)
+    if callable(seek):
+        seek(0)
     name = uploaded_file.name.lower()
     raw = uploaded_file.read()
 
     if name.endswith(".pdf"):
-        reader = PdfReader(io.BytesIO(raw))
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
+        with pdfplumber.open(io.BytesIO(raw)) as pdf:
+            return "\n".join(page.extract_text() or "" for page in pdf.pages)
     if name.endswith(".docx"):
         doc = Document(io.BytesIO(raw))
         return "\n".join(p.text for p in doc.paragraphs)
@@ -231,6 +248,23 @@ def analyze_cv(text: str) -> dict:
     }
 
 
+EDUCATION_SCORE_WEIGHTS: dict[str, float] = {"Ön Lisans": 0.5, "Lisans": 1, "Yüksek Lisans": 2, "Doktora": 3}
+
+
+def general_score(result: dict) -> float:
+    """Bir iş ilanı olmadan CV'leri kıyaslamak için genel bir güç skoru üretir.
+
+    Beceri sayısı + (üst sınırlı) deneyim yılı + eğitim düzeyi ağırlığından oluşan
+    basit, açıklanabilir bir toplam. `analyze_cv()` çıktısı üzerinde çalışır; çoklu
+    CV karşılaştırmasında ilan metni girilmediğinde sıralama ölçütü olarak kullanılır.
+    """
+    score = len(result["all_skills"])
+    if result["experience_years"]:
+        score += min(result["experience_years"], 15) * 0.5
+    score += EDUCATION_SCORE_WEIGHTS.get(result["education"], 0)
+    return round(score, 1)
+
+
 def match_cv_to_job(cv_text: str, job_text: str) -> dict:
     """Bir CV'yi belirli bir iş ilanı metnine göre eşleştirir.
 
@@ -280,6 +314,35 @@ def match_cv_to_job(cv_text: str, job_text: str) -> dict:
         "experience_met": experience_met,
         "group_breakdown": group_breakdown,
     }
+
+
+def hire_likelihood(result: dict, match: dict | None = None) -> int:
+    """CV (ve varsa ilan eşleşmesi) sinyallerinden 0-100 arası sezgisel bir 'işe uygunluk
+    olasılığı' tahmini üretir.
+
+    Gerçek bir ML modeli değildir (bkz. modül docstring'i); mevcut `analyze_cv`/
+    `match_cv_to_job` çıktılarının kural tabanlı ağırlıklı bir birleşimidir, bir ön
+    değerlendirme niteliğindedir.
+
+    - İlan verilmişse: beceri örtüşme yüzdesi (`match_pct`) ana etken (%70 ağırlık),
+      deneyim şartının karşılanması (+%15 / nötr +%7 / karşılanmıyorsa +0) ve adayın
+      genel profil gücü (`general_score`, %15 ağırlıkla, en fazla 20 puanlık dilimde
+      doygunlaşır) eklenir.
+    - İlan verilmemişse: `general_score` bir doygunluk eğrisiyle (skor arttıkça 100'e
+      yaklaşır ama asla ulaşmaz) 0-100 aralığına ölçeklenir.
+    """
+    if match is not None and match.get("match_pct") is not None:
+        score = match["match_pct"] * 0.7
+        if match.get("experience_met") is True:
+            score += 15
+        elif match.get("experience_met") is None:
+            score += 7
+        score += min(general_score(result), 20) / 20 * 15
+        return round(min(score, 100))
+
+    score = general_score(result)
+    likelihood = 100 * (1 - math.exp(-score / 12))
+    return round(min(likelihood, 99))
 
 
 def build_report(file_name: str, result: dict) -> str:

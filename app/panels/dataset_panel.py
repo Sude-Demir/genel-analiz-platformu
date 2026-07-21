@@ -15,7 +15,7 @@ from theme import CATEGORICAL, SEQUENTIAL_BLUE, apply_layout
 REQUIRED_HR_COLUMNS = set(CATEGORICAL_FEATURES + NUMERIC_FEATURES + ["CalisanID", "Attrition"])
 
 
-def _load_uploaded(uploaded) -> pd.DataFrame:
+def load_uploaded(uploaded) -> pd.DataFrame:
     name = uploaded.name.lower()
     if name.endswith((".xlsx", ".xls")):
         return pd.read_excel(uploaded)
@@ -122,7 +122,7 @@ def render():
         uploaded = st.file_uploader("CSV, Excel veya JSON dosyası", type=["csv", "xlsx", "xls", "json"], key="ds_upload")
         if uploaded is not None:
             try:
-                st.session_state["ds_df"] = _load_uploaded(uploaded)
+                st.session_state["ds_df"] = load_uploaded(uploaded)
                 st.session_state["ds_name"] = uploaded.name
                 st.session_state["ds_is_builtin"] = False
             except Exception as exc:
