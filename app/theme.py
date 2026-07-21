@@ -31,8 +31,8 @@ PLOTLY_LAYOUT = dict(
     plot_bgcolor=SURFACE,
     paper_bgcolor=SURFACE,
     font=dict(color=TEXT_PRIMARY, family="system-ui, -apple-system, Segoe UI, sans-serif"),
-    xaxis=dict(gridcolor=GRID, linecolor=BASELINE, zerolinecolor=BASELINE),
-    yaxis=dict(gridcolor=GRID, linecolor=BASELINE, zerolinecolor=BASELINE),
+    xaxis=dict(gridcolor=GRID, linecolor=BASELINE, zerolinecolor=BASELINE, automargin=True),
+    yaxis=dict(gridcolor=GRID, linecolor=BASELINE, zerolinecolor=BASELINE, automargin=True),
     margin=dict(l=10, r=10, t=40, b=10),
 )
 
