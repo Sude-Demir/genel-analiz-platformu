@@ -155,6 +155,33 @@ def extract_topics(texts: list[str], company: str, top_n: int = 15) -> list[tupl
     return counter.most_common(top_n)
 
 
+def reputation_score(df: pd.DataFrame) -> tuple[int, str]:
+    """Duygu dağılımından 0-100 arası bir itibar puanı ve durum anahtarı üretir.
+
+    Durum anahtarı theme.STATUS sözlüğüyle eşleşir: good/warning/serious/critical.
+    Tüm bahsedilmeler pozitifse 100'e, tümü negatifse 0'a yaklaşır; veri yoksa
+    veya duygular dengeliyse nötr varsayılan olan 50 döner.
+    """
+    total = len(df)
+    if total == 0:
+        return 50, "warning"
+
+    pos = int((df["duygu"] == "Pozitif").sum())
+    neg = int((df["duygu"] == "Negatif").sum())
+    score = round(50 + 50 * (pos - neg) / total)
+    score = max(0, min(100, score))
+
+    if score >= 75:
+        status = "good"
+    elif score >= 50:
+        status = "warning"
+    elif score >= 25:
+        status = "serious"
+    else:
+        status = "critical"
+    return score, status
+
+
 def build_dataframe(company: str) -> tuple[pd.DataFrame, list[str]]:
     records, warnings = collect_mentions(company)
     if not records:

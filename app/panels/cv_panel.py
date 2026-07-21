@@ -6,20 +6,24 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from ai_cv_analysis import DEFAULT_MODEL, analyze_cv_with_ai
-from cv_analysis import analyze_cv, extract_text, general_score, hire_likelihood, match_cv_to_job
+from cv_analysis import (
+    analyze_cv,
+    ats_compatibility,
+    detect_inconsistency,
+    extract_text,
+    find_duplicate_candidate,
+    general_score,
+    hire_likelihood,
+    match_cv_to_job,
+    match_multiple_jobs,
+)
 from export_utils import build_pdf, to_json_bytes
 from theme import CATEGORICAL, STATUS, apply_layout, risk_status
-
-AI_MODEL_OPTIONS = {
-    "Claude Sonnet (daha kaliteli)": DEFAULT_MODEL,
-    "Claude Haiku (daha hızlı/ucuz)": "claude-haiku-4-5-20251001",
-}
 
 
 def render():
     mod = st.radio(
-        "Mod", ["📄 Tek CV Analizi", "📊 Çoklu CV Karşılaştırma", "🤖 AI Destekli Derin Analiz"],
+        "Mod", ["📄 Tek CV Analizi", "📊 Çoklu CV Karşılaştırma", "🆓 ATS & Derin Analiz"],
         horizontal=True, key="cv_mode",
     )
     st.divider()
@@ -28,7 +32,7 @@ def render():
     elif mod == "📊 Çoklu CV Karşılaştırma":
         _render_compare_cvs()
     else:
-        _render_ai_analysis()
+        _render_deep_analysis()
 
 
 def _render_single_cv():
@@ -407,20 +411,14 @@ def _parse_job_postings(text: str) -> list[str]:
     return [p.strip() for p in postings if p.strip()]
 
 
-def _get_api_key() -> str | None:
-    try:
-        return st.secrets.get("ANTHROPIC_API_KEY")
-    except Exception:
-        return None
-
-
-def _render_ai_analysis():
-    st.subheader("🤖 AI Destekli Derin Analiz")
+def _render_deep_analysis():
+    st.subheader("🆓 ATS Uyumu & Derin Analiz")
     st.caption(
-        "Bu mod, ATS uyum skoru, deneyim/proje tutarsızlığı tespiti, ilan listesine göre gerekçeli "
-        "eşleştirme ve yinelenen aday kontrolü için **Anthropic Claude API'sini** kullanır. CV metniniz "
-        "bu harici, ücretli servise gönderilir. Diğer modların aksine kural tabanlı değildir; sonuçlar "
-        "yapay zeka tarafından üretilir ve insan incelemesiyle doğrulanmalıdır."
+        "ATS uyum skoru, deneyim/unvan tutarsızlığı tespiti, ilan listesine göre gerekçeli "
+        "eşleştirme ve yinelenen aday kontrolü — tamamen kural tabanlı, **ücretsiz** ve harici "
+        "hiçbir API'ye bağımlı değil (ATS format kontrolü açık kaynak OpenResume'un yaklaşımından "
+        "esinlenmiştir). Diğer modlar gibi bir ön değerlendirmedir; nihai karar için insan "
+        "incelemesi önerilir."
     )
 
     # Karşılaştırma sekmesindeki dosyalar mevcutsa, metinlerini hemen widget'a bağlı
@@ -439,9 +437,9 @@ def _render_ai_analysis():
             if text.strip():
                 pool[f.name] = text
         if pool:
-            st.session_state["cv_ai_candidate_pool"] = pool
+            st.session_state["cv_deep_candidate_pool"] = pool
 
-    candidate_pool = st.session_state.get("cv_ai_candidate_pool")
+    candidate_pool = st.session_state.get("cv_deep_candidate_pool")
     if not candidate_pool:
         st.info(
             "Bu özellik, **📊 Çoklu CV Karşılaştırma** sekmesinde yüklediğiniz CV'leri kullanır "
@@ -450,46 +448,30 @@ def _render_ai_analysis():
         )
         return
 
-    api_key = _get_api_key()
-    if not api_key:
-        st.warning(
-            "`ANTHROPIC_API_KEY` bulunamadı. `.streamlit/secrets.toml` dosyasını "
-            "`.streamlit/secrets.toml.example` şablonundan oluşturup kendi API anahtarınızı ekleyin."
-        )
+    file_names = list(candidate_pool.keys())
+    subject_name = st.selectbox("Derin analiz edilecek CV", file_names, key="cv_deep_subject")
+    job_text = st.text_area(
+        "İş ilanları (birden fazla ilanı '---' ile ayırın, opsiyonel)", height=180, key="cv_deep_job_postings",
+    )
+
+    if not st.button("Analiz Et", type="primary", key="cv_deep_analyze_btn"):
         return
 
-    file_names = list(candidate_pool.keys())
-    subject_name = st.selectbox("Derin analiz edilecek CV", file_names, key="cv_ai_subject")
-    job_text = st.text_area(
-        "İş ilanları (birden fazla ilanı '---' ile ayırın)", height=180, key="cv_ai_job_postings",
-    )
-    model_label = st.selectbox("Model", list(AI_MODEL_OPTIONS.keys()), key="cv_ai_model")
+    subject_text = candidate_pool[subject_name]
+    subject_result = analyze_cv(subject_text)
+    other_candidates = [
+        {"dosya": name, "text": text}
+        for name, text in candidate_pool.items() if name != subject_name
+    ]
+    job_postings = _parse_job_postings(job_text)
+    single_match = match_cv_to_job(subject_text, job_postings[0]) if len(job_postings) == 1 else None
 
-    if not st.button("AI ile Analiz Et", type="primary", key="cv_ai_analyze_btn"):
-        result = st.session_state.get("cv_ai_result")
-        if result is None:
-            return
-    else:
-        subject_text = candidate_pool[subject_name]
-        other_candidates = [
-            {"dosya": name, "text": text}
-            for name, text in candidate_pool.items() if name != subject_name
-        ]
-        job_postings = _parse_job_postings(job_text)
-
-        with st.spinner("Claude API ile analiz ediliyor..."):
-            try:
-                result = analyze_cv_with_ai(
-                    api_key=api_key,
-                    cv_text=subject_text,
-                    job_postings=job_postings,
-                    other_candidates=other_candidates,
-                    model=AI_MODEL_OPTIONS[model_label],
-                )
-            except Exception as exc:
-                st.error(f"AI analizi başarısız oldu: {exc}")
-                return
-        st.session_state["cv_ai_result"] = result
+    result = {
+        "ats_uyum": ats_compatibility(subject_result, subject_text, single_match),
+        "tutarsizlik": detect_inconsistency(subject_result, subject_text),
+        "ilan_eslestirme": match_multiple_jobs(subject_text, job_postings),
+        "yinelenen_aday": find_duplicate_candidate(subject_text, subject_result, other_candidates),
+    }
 
     st.success(f"Analiz edilen CV: **{subject_name}**")
 
@@ -553,7 +535,7 @@ def _render_ai_analysis():
     with c1:
         st.download_button(
             "JSON indir", data=to_json_bytes({"aday": subject_name, **result}),
-            file_name=f"{subject_name}_ai_analiz.json", mime="application/json", key="cv_ai_json",
+            file_name=f"{subject_name}_derin_analiz.json", mime="application/json", key="cv_deep_json",
         )
     with c2:
         pdf_blocks = [
@@ -566,13 +548,13 @@ def _render_ai_analysis():
             )} if ilanlar else {"heading": "İlan Eşleştirme", "type": "paragraph", "content": "İlan listesi girilmedi."},
             {"heading": "Yinelenen Aday Kontrolü", "type": "paragraph", "content": yinelenen["aciklama"]},
         ]
-        pdf_bytes = build_pdf(f"AI Destekli CV Analiz Raporu — {subject_name}", pdf_blocks)
+        pdf_bytes = build_pdf(f"CV Derin Analiz Raporu — {subject_name}", pdf_blocks)
         st.download_button(
             "PDF indir", data=pdf_bytes,
-            file_name=f"{subject_name}_ai_analiz.pdf", mime="application/pdf", key="cv_ai_pdf",
+            file_name=f"{subject_name}_derin_analiz.pdf", mime="application/pdf", key="cv_deep_pdf",
         )
 
     st.caption(
-        "Not: Bu analiz Anthropic Claude API'si tarafından üretilmiştir (harici, ücretli bir servis); "
-        "nihai karar için insan incelemesi şarttır."
+        "Not: Bu analiz anahtar kelime ve kural tabanlı sezgisel bir yöntemle üretilmiştir; "
+        "bir ön değerlendirme olarak kullanılmalı, nihai karar için insan incelemesi yapılmalıdır."
     )

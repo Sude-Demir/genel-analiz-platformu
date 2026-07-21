@@ -4,6 +4,7 @@ Harici bir LLM/API'ye bağımlı olmadan çalışır: beceri anahtar kelimeleri,
 regex desenleri ve alan->pozisyon eşlemesi üzerinden güçlü/zayıf yön özeti ve
 uygun pozisyon önerisi üretir. Bu nedenle sonuçlar bir ön değerlendirme niteliğindedir.
 """
+import difflib
 import io
 import math
 import re
@@ -343,6 +344,178 @@ def hire_likelihood(result: dict, match: dict | None = None) -> int:
     score = general_score(result)
     likelihood = 100 * (1 - math.exp(-score / 12))
     return round(min(likelihood, 99))
+
+
+STANDARD_SECTION_HEADERS: dict[str, list[str]] = {
+    "Deneyim": ["deneyim", "iş deneyimi", "çalışma deneyimi", "work experience", "experience"],
+    "Eğitim": ["eğitim", "öğrenim", "education"],
+    "Beceriler": ["beceri", "yetkinlik", "skill"],
+}
+MULTI_SPACE_RUN_RE = re.compile(r"\S {3,}\S")
+REPLACEMENT_CHAR_RE = re.compile(r"�")
+SENIOR_TITLE_KEYWORDS = ["kıdemli", "senior", "yönetici", "müdür", "direktör", "lead", "şef", "başkan"]
+
+
+def check_ats_format(text: str) -> list[str]:
+    """OpenResume'un ATS ayrıştırma yaklaşımından (github.com/xitanggg/open-resume)
+    esinlenerek, bir CV'nin format açısından ATS (Başvuru Takip Sistemi) tarafından
+    ne kadar kolay ayrıştırılabileceğini kural tabanlı kontrol eder: standart bölüm
+    başlıklarının varlığı, tablo/çoklu sütun kullanımına işaret eden geniş boşluk
+    desenleri, ve bozuk/okunamayan karakterler. Harici bir servise bağımlı değildir.
+    """
+    text_lower = turkish_lower(text)
+    issues = []
+
+    for section, keywords in STANDARD_SECTION_HEADERS.items():
+        if not any(kw in text_lower for kw in keywords):
+            issues.append(f"Standart '{section}' bölüm başlığı bulunamadı; ATS sistemleri bu bölümü tanımayabilir.")
+
+    lines = [line for line in text.split("\n") if line.strip()]
+    if lines:
+        multi_space_lines = sum(1 for line in lines if MULTI_SPACE_RUN_RE.search(line))
+        if multi_space_lines / len(lines) > 0.15:
+            issues.append(
+                "Metinde çok sayıda geniş boşluk deseni tespit edildi; bu genellikle tablo veya "
+                "çoklu sütun düzeninden kaynaklanır ve ATS'in metni yanlış sırada okumasına yol açabilir."
+            )
+
+    if REPLACEMENT_CHAR_RE.search(text):
+        issues.append(
+            "Metinde bozuk/okunamayan karakterler tespit edildi; bu genellikle özel yazı tipi, "
+            "görsel öğe veya taranmış içerikten kaynaklanır."
+        )
+
+    return issues
+
+
+def ats_compatibility(result: dict, text: str, match: dict | None = None) -> dict:
+    """ATS uyum skoru (0-100), eksik anahtar kelimeler, format sorunları ve en fazla
+    3 iyileştirme önerisi üretir.
+
+    `result` = `analyze_cv()` çıktısı, `match` = (varsa) `match_cv_to_job()` çıktısı.
+    Tamamen kural tabanlıdır; harici bir LLM/API kullanmaz.
+    """
+    format_sorunlari = check_ats_format(text)
+
+    if match is not None and match.get("job_skills"):
+        eksik_anahtar_kelimeler = match["missing_skills"]
+        keyword_coverage = match["match_pct"] if match["match_pct"] is not None else 100
+    else:
+        eksik_anahtar_kelimeler = []
+        keyword_coverage = 100 if result["all_skills"] else 40
+
+    skor = keyword_coverage - len(format_sorunlari) * 15
+    if not result["contact"]["email"] and not result["contact"]["phone"]:
+        skor -= 10
+    skor = max(0, min(100, round(skor)))
+
+    oneriler = []
+    if eksik_anahtar_kelimeler:
+        oneriler.append(f"İlanda geçen ama CV'de olmayan şu anahtar kelimeleri ekleyin: {', '.join(eksik_anahtar_kelimeler[:5])}.")
+    oneriler.extend(format_sorunlari)
+    if not result["contact"]["email"] and not result["contact"]["phone"]:
+        oneriler.append("İletişim bilgilerinizi (e-posta, telefon) CV'nin üst kısmına düz metin olarak ekleyin.")
+
+    return {
+        "skor": skor,
+        "eksik_anahtar_kelimeler": eksik_anahtar_kelimeler,
+        "format_sorunlari": format_sorunlari,
+        "oneriler": oneriler[:3],
+    }
+
+
+def detect_inconsistency(result: dict, text: str) -> dict:
+    """Beyan edilen deneyim yılı/unvan ile CV içeriğinin genel zenginliği arasındaki
+    kaba bir tutarsızlık sinyalini kural tabanlı olarak tespit eder.
+
+    Gerçek bir dil modeli muhakemesi değildir (bu nedenle yalnızca belirgin
+    uyumsuzlukları yakalar); sonuç bir ön değerlendirme niteliğindedir.
+    """
+    text_lower = turkish_lower(text)
+    has_senior_title = any(kw in text_lower for kw in SENIOR_TITLE_KEYWORDS)
+    experience_years = result["experience_years"]
+
+    if has_senior_title and (experience_years is None or experience_years < 3):
+        deneyim_str = f"{experience_years} yıl" if experience_years is not None else "belirtilmemiş"
+        return {
+            "var_mi": True,
+            "aciklama": (
+                f"CV'de kıdemli/yönetici düzeyinde bir unvan geçiyor ama beyan edilen deneyim "
+                f"({deneyim_str}) bu düzeyle örtüşmüyor gibi görünüyor. İnsan incelemesi önerilir."
+            ),
+        }
+    if has_senior_title and result["word_count"] < 120:
+        return {
+            "var_mi": True,
+            "aciklama": (
+                "CV'de kıdemli/yönetici düzeyinde bir unvan geçiyor ama CV metni bu düzeyi "
+                "destekleyecek ayrıntıda (proje/sorumluluk anlatımı) değil."
+            ),
+        }
+    return {
+        "var_mi": False,
+        "aciklama": "Tutarlı: beyan edilen deneyim/unvan ile CV içeriği arasında belirgin bir uyumsuzluk tespit edilmedi.",
+    }
+
+
+def match_multiple_jobs(cv_text: str, job_postings: list[str]) -> list[dict]:
+    """Birden fazla ilan için `match_cv_to_job()`'u çalıştırıp skor azalan sırada
+    sıralanmış, kısa gerekçeli bir liste döndürür."""
+    results = []
+    for i, posting in enumerate(job_postings, start=1):
+        m = match_cv_to_job(cv_text, posting)
+        if m["match_pct"] is None:
+            skor = 0
+            gerekce = "İlan metninde tanınan beceri anahtar kelimesi bulunamadı."
+        else:
+            skor = m["match_pct"]
+            gerekce = (
+                f"{len(m['matched_skills'])} eşleşen / {len(m['missing_skills'])} eksik beceri "
+                f"(%{m['match_pct']} örtüşme)."
+            )
+            if m.get("experience_met") is True:
+                gerekce += " Deneyim şartı karşılanıyor."
+            elif m.get("experience_met") is False:
+                gerekce += " Deneyim şartı karşılanmıyor."
+        results.append({"ilan_basligi": f"İlan {i}", "skor": skor, "gerekce": gerekce})
+    results.sort(key=lambda r: r["skor"], reverse=True)
+    return results
+
+
+def find_duplicate_candidate(subject_text: str, subject_result: dict, pool: list[dict]) -> dict:
+    """Aday havuzunda (`[{"dosya": str, "text": str}, ...]`) isim/e-posta/telefon veya
+    içerik benzerliği (>%80) olan bir kayıt olup olmadığını kural tabanlı kontrol eder.
+
+    İçerik benzerliği `difflib.SequenceMatcher` ile hesaplanır; e-posta/telefon tam
+    eşleşmesi doğrudan %100 benzerlik olarak kabul edilir.
+    """
+    subject_lower = turkish_lower(subject_text)
+    best = None
+    for candidate in pool:
+        c_result = analyze_cv(candidate["text"])
+        contact_match = bool(
+            (subject_result["contact"]["email"] and subject_result["contact"]["email"] == c_result["contact"]["email"])
+            or (subject_result["contact"]["phone"] and subject_result["contact"]["phone"] == c_result["contact"]["phone"])
+        )
+        content_ratio = difflib.SequenceMatcher(None, subject_lower, turkish_lower(candidate["text"])).ratio() * 100
+        benzerlik = 100 if contact_match else round(content_ratio)
+        if best is None or benzerlik > best["benzerlik_orani"]:
+            best = {"dosya": candidate["dosya"], "benzerlik_orani": benzerlik, "contact_match": contact_match}
+
+    if best is None or best["benzerlik_orani"] < 80:
+        return {
+            "bulundu_mu": False, "eslesen_kayit": None, "benzerlik_orani": None,
+            "aciklama": "Aday havuzunda yinelenen bir kayıt bulunamadı.",
+        }
+
+    aciklama = (
+        "İletişim bilgileri (e-posta/telefon) örtüşüyor." if best["contact_match"]
+        else "İçerik benzerliği yüksek; aynı adayın farklı bir sürümü olabilir."
+    )
+    return {
+        "bulundu_mu": True, "eslesen_kayit": best["dosya"], "benzerlik_orani": best["benzerlik_orani"],
+        "aciklama": aciklama,
+    }
 
 
 def build_report(file_name: str, result: dict) -> str:

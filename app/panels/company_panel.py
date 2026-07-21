@@ -1,9 +1,10 @@
 """Şirket Analizi paneli — şirket adı ile web/sosyal medya taraması, duygu analizi ve konu çıkarımı."""
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
-from company_analysis import build_dataframe, extract_topics
+from company_analysis import build_dataframe, extract_topics, reputation_score
 from export_utils import build_pdf, to_json_bytes
 from theme import CATEGORICAL, MUTED, STATUS, apply_layout
 
@@ -42,6 +43,8 @@ def render():
 
     st.success(f"'{company_name}' için {len(df)} kaynak bulundu.")
 
+    score, status = reputation_score(df)
+
     with st.container(border=True):
         counts = df["duygu"].value_counts()
         c1, c2, c3, c4 = st.columns(4)
@@ -49,6 +52,14 @@ def render():
         c2.metric("Pozitif", int(counts.get("Pozitif", 0)))
         c3.metric("Nötr", int(counts.get("Nötr", 0)))
         c4.metric("Negatif", int(counts.get("Negatif", 0)))
+
+        st.markdown("**İtibar Puanı**")
+        fig_score = go.Figure(go.Indicator(
+            mode="gauge+number", value=score,
+            gauge={"axis": {"range": [0, 100]}, "bar": {"color": STATUS[status]}},
+        ))
+        apply_layout(fig_score, height=220)
+        st.plotly_chart(fig_score, width="stretch", theme=None)
 
         left, right = st.columns(2)
         with left:
@@ -95,6 +106,7 @@ def render():
         json_payload = {
             "sirket": company_name,
             "toplam_kaynak": len(df),
+            "itibar_puani": score,
             "duygu_dagilimi": {k: int(v) for k, v in counts.to_dict().items()},
             "one_cikan_konular": topics,
             "kaynaklar": df.to_dict(orient="records"),
@@ -108,6 +120,7 @@ def render():
         blocks = [
             {"heading": "Genel Özet", "type": "bullets", "content": [
                 f"Toplam taranan kaynak: {len(df)}",
+                f"İtibar Puanı: {score}/100",
                 f"Pozitif: {int(counts.get('Pozitif', 0))}",
                 f"Nötr: {int(counts.get('Nötr', 0))}",
                 f"Negatif: {int(counts.get('Negatif', 0))}",

@@ -31,16 +31,16 @@ MUTED = "#898781"  # eksen/etiket rengi; açık ve koyu temada aynı
 
 _CHROME = {
     "light": {
-        "surface": "#fcfcfb",
-        "grid": "#e1e0d9",
-        "baseline": "#c3c2b7",
-        "text_primary": "#0b0b0b",
+        "surface": "#f5f3e4",
+        "grid": "#ddd6b8",
+        "baseline": "#c3bb92",
+        "text_primary": "#1a1a12",
     },
     "dark": {
-        "surface": "#1a1a19",
-        "grid": "#2c2c2a",
-        "baseline": "#383835",
-        "text_primary": "#ffffff",
+        "surface": "#1c1c14",
+        "grid": "#33321f",
+        "baseline": "#4a4832",
+        "text_primary": "#f5f3e4",
     },
 }
 

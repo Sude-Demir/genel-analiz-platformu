@@ -3,13 +3,13 @@ font = "sans serif"
 baseRadius = "medium"
 
 [theme.light]
-primaryColor = "#4f46e5"
-backgroundColor = "#fcfcfb"
-secondaryBackgroundColor = "#f9f9f7"
-textColor = "#0b0b0b"
+primaryColor = "#6b6f3f"
+backgroundColor = "#f5f3e4"
+secondaryBackgroundColor = "#eae5cc"
+textColor = "#1a1a12"
 
 [theme.dark]
-primaryColor = "#818cf8"
-backgroundColor = "#0d0d0d"
-secondaryBackgroundColor = "#1a1a19"
-textColor = "#ffffff"
+primaryColor = "#b5b573"
+backgroundColor = "#1c1c14"
+secondaryBackgroundColor = "#2a2a1e"
+textColor = "#f5f3e4"
