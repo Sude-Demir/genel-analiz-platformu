@@ -83,13 +83,19 @@ def render(emp: pd.DataFrame):
         "ortalama_egitim_sayisi": float(df["GecenYilEgitimSayisi"].mean()),
         "pozisyona_gore_en_iyi_10": role_perf.to_dict(orient="records"),
     }
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     with c1:
+        st.download_button(
+            "Pozisyon Tablosunu CSV indir",
+            data=role_perf[["Pozisyon", "OrtalamaPerformans", "CalisanSayisi"]].to_csv(index=False).encode("utf-8"),
+            file_name="performans_pozisyon_tablosu.csv", mime="text/csv", key="perf_csv",
+        )
+    with c2:
         st.download_button(
             "JSON indir", data=to_json_bytes(summary),
             file_name="performans_analizi.json", mime="application/json", key="perf_json",
         )
-    with c2:
+    with c3:
         pdf_bytes = build_pdf("Performans Analizi Raporu", [
             {"heading": "Özet", "type": "bullets", "content": [
                 f"Departman filtresi: {secilen_departman}",

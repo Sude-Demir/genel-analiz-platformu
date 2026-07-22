@@ -3,10 +3,13 @@ from cv_analysis import (
     ats_compatibility,
     check_ats_format,
     detect_inconsistency,
+    extract_name,
     find_duplicate_candidate,
+    find_skills,
     general_score,
     match_cv_to_job,
     match_multiple_jobs,
+    skill_development_tips,
     turkish_lower,
 )
 
@@ -206,3 +209,62 @@ def test_find_duplicate_candidate_returns_false_when_no_match():
     dup = find_duplicate_candidate(subject_text, subject_result, pool)
 
     assert dup["bulundu_mu"] is False
+
+
+def test_extract_name_from_first_line():
+    text = "Ahmet Yılmaz\nDeneyim\n5 yıllık deneyimim var. Python biliyorum."
+    assert extract_name(text) == "Ahmet Yılmaz"
+
+
+def test_extract_name_skips_section_headers_and_falls_back_to_email():
+    text = "Özgeçmiş\nDeneyim\nE-posta: ahmet.yilmaz@example.com\nPython biliyorum."
+    assert extract_name(text) == "Ahmet Yilmaz"
+
+
+def test_extract_name_returns_none_when_no_signal_found():
+    text = "python sql docker beceri deneyim eğitim"
+    assert extract_name(text) is None
+
+
+def test_analyze_cv_includes_name_field():
+    result = analyze_cv("Ahmet Yılmaz\nPython ve SQL biliyorum.")
+    assert result["name"] == "Ahmet Yılmaz"
+
+
+def test_find_skills_matches_abbreviation_synonym():
+    skills = find_skills(turkish_lower("JS ve ML konularında tecrübeliyim."))
+    all_skills = {kw for kws in skills.values() for kw in kws}
+    assert "javascript" in all_skills
+    assert "machine learning" in all_skills
+
+
+def test_find_skills_synonym_uses_word_boundary_not_substring():
+    # "ik" İnsan Kaynakları kısaltmasıdır ama "yöneticilik" kelimesinin içinde
+    # yanlışlıkla eşleşmemelidir (kelime sınırı kontrolü).
+    skills = find_skills(turkish_lower("Uzun süredir yöneticilik yapıyorum."))
+    all_skills = {kw for kws in skills.values() for kw in kws}
+    assert "insan kaynakları" not in all_skills
+
+
+def test_find_skills_synonym_matches_standalone_abbreviation():
+    skills = find_skills(turkish_lower("İK departmanında çalışıyorum."))
+    all_skills = {kw for kws in skills.values() for kw in kws}
+    assert "insan kaynakları" in all_skills
+
+
+def test_skill_development_tips_uses_specific_tip_when_available():
+    tips = skill_development_tips(["python"])
+    assert len(tips) == 1
+    assert "Python" in tips[0]
+
+
+def test_skill_development_tips_falls_back_to_group_based_tip():
+    tips = skill_development_tips(["kanban"])
+    assert len(tips) == 1
+    assert "Kanban" in tips[0]
+    assert "Proje / Ürün Yönetimi" in tips[0]
+
+
+def test_skill_development_tips_respects_limit():
+    tips = skill_development_tips(["python", "sql", "docker", "git", "excel", "kanban"], limit=3)
+    assert len(tips) == 3

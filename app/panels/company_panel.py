@@ -4,9 +4,19 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from company_analysis import build_dataframe, extract_topics, reputation_score
+from company_analysis import build_dataframe, extract_topics, reputation_score, sentiment_timeline
 from export_utils import build_pdf, to_json_bytes
 from theme import CATEGORICAL, MUTED, STATUS, apply_layout
+
+CACHE_TTL_SECONDS = 1800  # aynı şirket adı için tekrar tıklamada yeniden taramayı önler
+ORNEK_SIRKET = "Turkcell"
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def _cached_scan(company: str):
+    df, warnings = build_dataframe(company)
+    topics = extract_topics((df["başlık"] + " " + df["özet"]).tolist(), company) if not df.empty else []
+    return df, topics, warnings
 
 
 def render():
@@ -16,20 +26,29 @@ def render():
         "sözlük tabanlı duygu analizi yapar ve öne çıkan konuları çıkarır. İnternet bağlantısı gerektirir."
     )
 
-    company = st.text_input("Şirket Adı", placeholder="Örn: Turkcell", key="company_name_input")
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        company = st.text_input("Şirket Adı", placeholder="Örn: Turkcell", key="company_name_input")
+    with c2:
+        st.write("")
+        st.write("")
+        ornek_clicked = st.button("🔎 Örnek Dene", key="company_example_btn", width="stretch")
     analyze_clicked = st.button("Analiz Et", type="primary", disabled=not company.strip(), key="company_analyze_btn")
 
-    if analyze_clicked and company.strip():
-        with st.spinner(f"'{company}' için web ve haber kaynakları taranıyor..."):
-            df, warnings = build_dataframe(company.strip())
-            topics = extract_topics((df["başlık"] + " " + df["özet"]).tolist(), company.strip()) if not df.empty else []
-        st.session_state["company_name"] = company.strip()
+    if ornek_clicked:
+        company = ORNEK_SIRKET
+
+    if (analyze_clicked and company.strip()) or ornek_clicked:
+        target = company.strip() or ORNEK_SIRKET
+        with st.spinner(f"'{target}' için web ve haber kaynakları taranıyor..."):
+            df, topics, warnings = _cached_scan(target)
+        st.session_state["company_name"] = target
         st.session_state["company_df"] = df
         st.session_state["company_topics"] = topics
         st.session_state["company_warnings"] = warnings
 
     if "company_df" not in st.session_state:
-        st.info("Analiz başlatmak için bir şirket adı girip 'Analiz Et' butonuna tıklayın.")
+        st.info("Analiz başlatmak için bir şirket adı girip 'Analiz Et' butonuna tıklayın veya 'Örnek Dene' ile hemen deneyin.")
         return
 
     company_name = st.session_state["company_name"]
@@ -82,6 +101,20 @@ def render():
                 st.plotly_chart(fig, width="stretch", theme=None)
             else:
                 st.info("Öne çıkan konu tespit edilemedi.")
+
+    timeline = sentiment_timeline(df)
+    if not timeline.empty:
+        st.markdown("### 📈 Zaman İçinde İtibar Trendi")
+        with st.container(border=True):
+            sentiment_colors = {"Pozitif": STATUS["good"], "Nötr": MUTED, "Negatif": STATUS["critical"]}
+            fig_trend = px.bar(
+                timeline, x="tarih", y="adet", color="duygu",
+                color_discrete_map=sentiment_colors,
+                labels={"tarih": "Tarih", "adet": "Kaynak Sayısı", "duygu": "Duygu"},
+            )
+            apply_layout(fig_trend, barmode="stack")
+            st.plotly_chart(fig_trend, width="stretch", theme=None)
+            st.caption("Yalnızca tarih bilgisi taşıyan (esas olarak Google Haberler) kaynaklar bu grafiğe dahildir.")
 
     st.markdown("### Kaynaklar")
     st.dataframe(

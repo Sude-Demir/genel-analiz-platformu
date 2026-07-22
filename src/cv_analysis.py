@@ -15,6 +15,12 @@ from docx import Document
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}")
 PHONE_RE = re.compile(r"(?:\+90|0)?[\s.-]?5\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}")
+NAME_LINE_RE = re.compile(r"^[A-ZÇĞİÖŞÜ][a-zçğıöşüA-ZÇĞİÖŞÜ.'-]+(?:\s+[A-ZÇĞİÖŞÜ][a-zçğıöşüA-ZÇĞİÖŞÜ.'-]+){1,3}$")
+NAME_LINE_MAX_LEN = 40
+NAME_SKIP_KEYWORDS = [
+    "cv", "özgeçmiş", "resume", "curriculum", "deneyim", "eğitim", "beceri",
+    "iletişim", "hakkımda", "profil", "experience", "education", "skill",
+]
 EXPERIENCE_YEAR_RE = re.compile(r"(\d{1,2})\+?\s*(?:yıl|yıllık|years?)\b", re.IGNORECASE)
 DATE_RANGE_RE = re.compile(r"\b(19|20)\d{2}\s*[-–—]\s*((?:19|20)\d{2}|[Gg]ünümüz|[Hh]alen|[Pp]resent)\b")
 QUANTIFIED_RESULT_RE = re.compile(r"(%\s?\d+|\d+\s?%|\d+\s*(kişi|proje|milyon|bin|kat|adet|ekip))", re.IGNORECASE)
@@ -88,6 +94,37 @@ EDUCATION_LEVELS: dict[str, list[str]] = {
 
 STRONG_GROUP_THRESHOLD = 3
 
+# Bazı SKILL_GROUPS anahtar kelimelerinin sık kullanılan kısaltma/eş anlamlıları.
+# Anahtarlar SKILL_GROUPS içindeki kanonik kelimelerle birebir eşleşmelidir;
+# find_skills() bir eş anlamlıyı yakaladığında sonuçta kısaltma değil kanonik
+# kelime raporlanır (böylece match_cv_to_job gibi diğer fonksiyonlar etkilenmez).
+SKILL_SYNONYMS: dict[str, list[str]] = {
+    "javascript": ["js"],
+    "typescript": ["ts"],
+    "machine learning": ["ml"],
+    "kubernetes": ["k8s"],
+    "kullanıcı deneyimi": ["ux"],
+    "kullanıcı arayüzü": ["ui"],
+    "insan kaynakları": ["ik", "hr"],
+    "veri bilimi": ["data science"],
+    "veri analizi": ["data analysis"],
+    "büyük veri": ["big data"],
+    "yazılım geliştirme": ["software development"],
+    "proje yönetimi": ["project management"],
+    "dijital pazarlama": ["digital marketing"],
+    "grafik tasarım": ["graphic design"],
+    ".net": ["dotnet"],
+    "node.js": ["nodejs"],
+    "c++": ["cpp"],
+    "c#": ["c sharp", "csharp"],
+}
+# Kısaltmalar kelime sınırıyla (\b) eşleştirilir; aksi halde "ik" gibi kısa bir
+# kısaltma "yöneticilik" gibi kelimelerin içinde yanlışlıkla eşleşebilirdi.
+_SYNONYM_PATTERNS: dict[str, list[re.Pattern]] = {
+    canonical: [re.compile(rf"\b{re.escape(syn)}\b") for syn in synonyms]
+    for canonical, synonyms in SKILL_SYNONYMS.items()
+}
+
 _TURKISH_UPPER_MAP = str.maketrans("İ", "i")
 
 
@@ -144,10 +181,56 @@ def extract_contact(text: str) -> dict:
     }
 
 
+def extract_name(text: str, email: str | None = None) -> str | None:
+    """CV metninin başındaki satırlardan aday adını sezgisel olarak tahmin eder.
+
+    İlk birkaç dolu satır arasında, 2-4 kelimeden oluşan, büyük harfle başlayan
+    ve rakam/e-posta/bölüm başlığı içermeyen bir satır aranır (özgeçmişlerde ad
+    genellikle en üstte, tek başına bir satırda yer alır). Böyle bir satır
+    bulunamazsa, e-posta adresinin kullanıcı adı kısmından kaba bir tahmin
+    üretilir (ör. "ahmet.yilmaz@..." -> "Ahmet Yilmaz"). Hiçbiri başarısız
+    olursa None döner; bu nedenle sonuç her zaman bir onay gerektiren bir
+    tahmindir, kesin bir kimlik doğrulaması değildir.
+    """
+    lines = [line.strip() for line in text.split("\n")]
+    for line in lines[:8]:
+        if not line or len(line) > NAME_LINE_MAX_LEN:
+            continue
+        if any(ch.isdigit() for ch in line) or "@" in line:
+            continue
+        line_lower = turkish_lower(line)
+        if any(kw in line_lower for kw in NAME_SKIP_KEYWORDS):
+            continue
+        if NAME_LINE_RE.match(line):
+            return line
+
+    email = email or (EMAIL_RE.search(text).group(0) if EMAIL_RE.search(text) else None)
+    if email:
+        local_part = email.split("@")[0]
+        pieces = re.split(r"[._\-+0-9]+", local_part)
+        pieces = [p for p in pieces if p]
+        if len(pieces) >= 2:
+            return " ".join(p.capitalize() for p in pieces)
+    return None
+
+
 def find_skills(text_lower: str) -> dict[str, list[str]]:
+    """Metinde geçen becerileri SKILL_GROUPS'a göre bulur.
+
+    Kanonik anahtar kelimenin kendisi ya da SKILL_SYNONYMS'ta tanımlı bir
+    kısaltma/eş anlamlısı (ör. "js" -> "javascript") eşleşirse, sonuçta her
+    zaman kanonik kelime raporlanır.
+    """
     matched: dict[str, list[str]] = {}
     for group, keywords in SKILL_GROUPS.items():
-        found = [kw for kw in keywords if kw in text_lower]
+        found = []
+        for kw in keywords:
+            if kw in text_lower:
+                found.append(kw)
+                continue
+            patterns = _SYNONYM_PATTERNS.get(kw)
+            if patterns and any(p.search(text_lower) for p in patterns):
+                found.append(kw)
         if found:
             matched[group] = found
     return matched
@@ -174,6 +257,7 @@ def detect_education(text_lower: str) -> str | None:
 def analyze_cv(text: str) -> dict:
     text_lower = turkish_lower(text)
     contact = extract_contact(text)
+    name = extract_name(text, email=contact["email"])
     skills = find_skills(text_lower)
     all_skills = sorted({kw for kws in skills.values() for kw in kws})
     experience_years = estimate_experience_years(text, text_lower)
@@ -237,6 +321,7 @@ def analyze_cv(text: str) -> dict:
     position_scores.sort(key=lambda r: r["Uygunluk Skoru"], reverse=True)
 
     return {
+        "name": name,
         "contact": contact,
         "skills": skills,
         "all_skills": all_skills,
@@ -315,6 +400,46 @@ def match_cv_to_job(cv_text: str, job_text: str) -> dict:
         "experience_met": experience_met,
         "group_breakdown": group_breakdown,
     }
+
+
+# Bazı becerilere özel, kısa gelişim önerileri. Burada olmayan beceriler için
+# skill_development_tips() ait olduğu SKILL_GROUPS alanına göre genel bir
+# öneri üretir; bu yüzden sözlüğün her beceriyi kapsaması gerekmez.
+SKILL_DEVELOPMENT_TIPS: dict[str, str] = {
+    "python": "ücretsiz platformlardaki (Codecademy, freeCodeCamp) temel kurslarla küçük bir proje geliştirerek pratik yapın.",
+    "sql": "SQLZoo veya HackerRank gibi ücretsiz alıştırma sitelerinde sorgu pratiği yapmak hızlı ilerleme sağlar.",
+    "docker": "Docker'ın resmi \"Get Started\" rehberini takip ederek küçük bir uygulamayı konteynerleştirmeyi deneyin.",
+    "power bi": "Microsoft'un ücretsiz Power BI Learn modülleriyle örnek bir veri seti üzerinde pano (dashboard) oluşturun.",
+    "scrum": "Ücretsiz Scrum Guide'ı okuyup Scrum.org'un deneme sınavlarıyla (Open Assessments) bilginizi pekiştirin.",
+    "figma": "Figma'nın kendi ücretsiz eğitim materyalleriyle küçük bir arayüz tasarımı üzerinde pratik yapın.",
+    "git": "Küçük bir kişisel projeyi Git ile versiyonlayıp GitHub'a yükleyerek temel komutları pratik yapın.",
+    "excel": "Ücretsiz Excel eğitim setleriyle formül, pivot tablo ve grafik oluşturma pratiği yapın.",
+}
+_KEYWORD_TO_GROUP: dict[str, str] = {kw: group for group, kws in SKILL_GROUPS.items() for kw in kws}
+
+
+def skill_development_tips(missing_skills: list[str], limit: int = 5) -> list[str]:
+    """Eksik beceriler için kısa, Türkçe gelişim önerileri üretir.
+
+    Önce beceriye özel bir öneri (SKILL_DEVELOPMENT_TIPS) aranır; yoksa
+    becerinin ait olduğu SKILL_GROUPS alanına göre genel bir öneri üretilir.
+    Tamamen kural tabanlıdır, harici bir kaynağa/API'ye bağımlı değildir.
+    """
+    tips = []
+    for skill in missing_skills[:limit]:
+        baslik = skill.capitalize()
+        if skill in SKILL_DEVELOPMENT_TIPS:
+            tips.append(f"{baslik}: {SKILL_DEVELOPMENT_TIPS[skill]}")
+            continue
+        group = _KEYWORD_TO_GROUP.get(skill)
+        if group:
+            tips.append(
+                f"{baslik}: \"{group}\" alanında ücretsiz çevrimiçi kaynaklar ve küçük "
+                "uygulamalı projelerle pratik yapmak önerilir."
+            )
+        else:
+            tips.append(f"{baslik}: bu beceriyi geliştirmek için ilgili alanda ücretsiz eğitim kaynakları araştırılabilir.")
+    return tips
 
 
 def hire_likelihood(result: dict, match: dict | None = None) -> int:
@@ -519,7 +644,11 @@ def find_duplicate_candidate(subject_text: str, subject_result: dict, pool: list
 
 
 def build_report(file_name: str, result: dict) -> str:
-    lines = [f"# CV Analiz Raporu — {file_name}", ""]
+    baslik = result.get("name") or file_name
+    lines = [f"# CV Analiz Raporu — {baslik}", ""]
+    if result.get("name"):
+        lines.append(f"_Dosya: {file_name}_")
+        lines.append("")
     lines.append("## İletişim Bilgileri")
     lines.append(f"- E-posta: {result['contact']['email'] or 'Tespit edilemedi'}")
     lines.append(f"- Telefon: {result['contact']['phone'] or 'Tespit edilemedi'}")

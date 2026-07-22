@@ -119,7 +119,8 @@ def render_risk_calculator(emp: pd.DataFrame, pipeline, explainer, key_prefix: s
 def render(emp: pd.DataFrame, pipeline, explainer):
     X_all = emp[CATEGORICAL_FEATURES + NUMERIC_FEATURES]
     emp = emp.copy()
-    emp["RiskSkoru"] = pipeline.predict_proba(X_all)[:, 1]
+    with st.spinner("Tüm çalışanlar için risk skorları hesaplanıyor..."):
+        emp["RiskSkoru"] = pipeline.predict_proba(X_all)[:, 1]
 
     tab1, tab2, tab3 = st.tabs(["Model Özeti", "Risk Skoru Hesaplayıcı", "En Riskli Çalışanlar"])
 

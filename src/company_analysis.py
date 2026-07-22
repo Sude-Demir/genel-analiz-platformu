@@ -182,6 +182,29 @@ def reputation_score(df: pd.DataFrame) -> tuple[int, str]:
     return score, status
 
 
+def sentiment_timeline(df: pd.DataFrame) -> pd.DataFrame:
+    """Toplanan kayıtlardaki `tarih` (RFC-822 pubDate) alanını ayrıştırıp güne göre
+    pozitif/nötr/negatif sayımını döndürür.
+
+    Yalnızca Google Haberler kaynaklı kayıtlarda `tarih` doldurulur (DuckDuckGo
+    sonuçlarında boştur); tarih ayrıştırılamayan kayıtlar sessizce göz ardı edilir.
+    Ayrıştırılabilir tarih bulunamazsa boş bir DataFrame döner.
+    """
+    if df.empty or "tarih" not in df.columns:
+        return pd.DataFrame(columns=["tarih", "duygu", "adet"])
+
+    calisma = df.copy()
+    calisma["tarih_ayristirilmis"] = pd.to_datetime(calisma["tarih"], errors="coerce", utc=True)
+    calisma = calisma.dropna(subset=["tarih_ayristirilmis"])
+    if calisma.empty:
+        return pd.DataFrame(columns=["tarih", "duygu", "adet"])
+
+    calisma["gun"] = calisma["tarih_ayristirilmis"].dt.date
+    grouped = calisma.groupby(["gun", "duygu"]).size().reset_index(name="adet")
+    grouped = grouped.rename(columns={"gun": "tarih"}).sort_values("tarih")
+    return grouped
+
+
 def build_dataframe(company: str) -> tuple[pd.DataFrame, list[str]]:
     records, warnings = collect_mentions(company)
     if not records:

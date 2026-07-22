@@ -1,9 +1,9 @@
 """Genel Analiz Platformu — tek sayfa, sol menüden sekme geçişli SPA kabuğu.
 
-Sol kenar çubuğundaki 3 sekme (Dataset Analizi / CV Analizi / Şirket Analizi)
-arasında geçiş yapıldığında sağ içerik alanı session_state üzerinden koşullu
-olarak yeniden çizilir; sayfa/URL değişmez (Streamlit'in çoklu-sayfa gezinmesi
-yerine tek script + session_state deseni kullanılır).
+Sol kenar çubuğundaki sekmeler (Anasayfa / Dataset Analizi / CV Analizi /
+Şirket Analizi) arasında geçiş yapıldığında sağ içerik alanı session_state
+üzerinden koşullu olarak yeniden çizilir; sayfa/URL değişmez (Streamlit'in
+çoklu-sayfa gezinmesi yerine tek script + session_state deseni kullanılır).
 """
 import os
 import sys
@@ -17,13 +17,12 @@ for _p in (SRC_DIR, APP_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from panels import company_panel, cv_panel, dataset_panel, home_panel, prediction_panel  # noqa: E402
+from panels import company_panel, cv_panel, dataset_panel, home_panel  # noqa: E402
 
 st.set_page_config(page_title="Genel Analiz Platformu", page_icon="🧪", layout="wide")
 
 PANELS = {
     "home": {"label": "🏠 Anasayfa", "render": home_panel.render},
-    "predict": {"label": "🔮 Tahmin", "render": prediction_panel.render},
     "dataset": {"label": "📁 Dataset Analizi", "render": dataset_panel.render},
     "cv": {"label": "📄 CV Analizi", "render": cv_panel.render},
     "company": {"label": "🌐 Şirket Analizi", "render": company_panel.render},

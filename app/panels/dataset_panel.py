@@ -6,6 +6,7 @@ import plotly.express as px
 import streamlit as st
 
 from auto_model import infer_column_types
+from data_insights import data_quality_report, detect_outliers, generate_insights
 from data_loader import data_ready, load_employees, load_explainer, load_model
 from export_utils import build_pdf, to_json_bytes
 from model import CATEGORICAL_FEATURES, NUMERIC_FEATURES
@@ -41,6 +42,44 @@ def _render_general_stats(df: pd.DataFrame, name: str):
         if not missing.empty:
             st.markdown("**Eksik Değerler**")
             st.dataframe(missing.rename("Eksik Sayısı").to_frame(), width="stretch")
+
+    st.markdown("### 🔎 Veri Kalitesi & Otomatik İçgörüler")
+    with st.container(border=True):
+        quality = data_quality_report(df)
+        outliers_df = detect_outliers(df)
+        insights = generate_insights(df)
+
+        if insights:
+            st.markdown("**Otomatik İçgörüler**")
+            for metin in insights:
+                st.markdown(f"- {metin}")
+        else:
+            st.caption("Bu veri setinde öne çıkan otomatik bir içgörü bulunamadı.")
+
+        kalite_notlari = []
+        if quality["yinelenen_satir"] > 0:
+            kalite_notlari.append(f"{quality['yinelenen_satir']} adet birebir yinelenen satır var.")
+        if quality["sabit_kolonlar"]:
+            kalite_notlari.append(f"Sabit/tek değerli kolonlar: {', '.join(quality['sabit_kolonlar'])}.")
+        if quality["yuksek_kardinaliteli_kolonlar"]:
+            kalite_notlari.append(
+                f"Neredeyse her satırda farklı değer alan (ID benzeri) kolonlar: "
+                f"{', '.join(quality['yuksek_kardinaliteli_kolonlar'])}."
+            )
+        if quality["yuksek_eksiklikli_kolonlar"]:
+            kalite_notlari.append(
+                "Yüksek oranda eksik veri içeren kolonlar: "
+                + ", ".join(f"{k} (%{round(v * 100)})" for k, v in quality["yuksek_eksiklikli_kolonlar"].items())
+                + "."
+            )
+        if kalite_notlari:
+            st.markdown("**Veri Kalitesi Notları**")
+            for not_metni in kalite_notlari:
+                st.markdown(f"- {not_metni}")
+
+        if not outliers_df.empty:
+            st.markdown("**Aykırı Değerler (IQR yöntemi)**")
+            st.dataframe(outliers_df, width="stretch")
 
     st.markdown("### Görselleştirmeler")
     with st.container(border=True):
@@ -90,6 +129,9 @@ def _render_general_stats(df: pd.DataFrame, name: str):
             "kategorik_kolonlar": categorical_cols,
             "ozet_istatistikler": describe_df.to_dict(orient="index"),
             "eksik_degerler": missing.to_dict(),
+            "veri_kalitesi": quality,
+            "aykiri_degerler": outliers_df.to_dict(orient="records"),
+            "otomatik_icgoruler": insights,
         }
         st.download_button(
             "JSON indir", data=to_json_bytes(json_payload),
@@ -107,6 +149,12 @@ def _render_general_stats(df: pd.DataFrame, name: str):
             blocks.append({"heading": "Eksik Değerler", "type": "table", "content": (
                 ["Kolon", "Eksik Sayısı"], list(missing.items()),
             )})
+        if insights:
+            blocks.append({"heading": "Otomatik İçgörüler", "type": "bullets", "content": insights})
+        if not outliers_df.empty:
+            blocks.append({"heading": "Aykırı Değerler (IQR)", "type": "table", "content": (
+                list(outliers_df.columns), [tuple(row) for row in outliers_df.itertuples(index=False)],
+            )})
         pdf_bytes = build_pdf(f"Veri Seti Analiz Raporu — {name}", blocks)
         st.download_button(
             "PDF indir", data=pdf_bytes,
@@ -122,11 +170,15 @@ def render():
         uploaded = st.file_uploader("CSV, Excel veya JSON dosyası", type=["csv", "xlsx", "xls", "json"], key="ds_upload")
         if uploaded is not None:
             try:
-                st.session_state["ds_df"] = load_uploaded(uploaded)
+                with st.spinner("Dosya okunuyor..."):
+                    st.session_state["ds_df"] = load_uploaded(uploaded)
                 st.session_state["ds_name"] = uploaded.name
                 st.session_state["ds_is_builtin"] = False
             except Exception as exc:
-                st.error(f"Dosya okunamadı: {exc}")
+                st.error(
+                    "Dosya okunamadı. Dosyanın seçilen formatta (CSV/Excel/JSON) ve bozuk olmadığından "
+                    f"emin olun. (Teknik detay: {exc})"
+                )
     else:
         if not data_ready():
             st.warning("Dahili İK veri seti bulunamadı. Önce `python src/data_prep.py` çalıştırın.")
@@ -165,7 +217,14 @@ def render():
     elif bundle is None:
         st.caption("Eğitilmiş çalışan kaybı modeli bulunamadı; önce `python src/model.py` çalıştırın.")
 
-    secim = st.selectbox("Modül Seç", options, key="ds_module_select")
+    # İK şeması + eğitilmiş model mevcutsa, en yüksek değerli modül (Çalışan Kaybı Tahmini)
+    # varsayılan olarak seçili gelir; kullanıcı "ds_module_select" widget'ıyla daha önce
+    # etkileşime girdiyse bu index yok sayılır (Streamlit yalnızca ilk render'da uygular).
+    default_index = 0
+    if has_hr_schema and bundle is not None and "📉 Çalışan Kaybı Tahmini" in options:
+        default_index = options.index("📉 Çalışan Kaybı Tahmini")
+
+    secim = st.selectbox("Modül Seç", options, index=default_index, key="ds_module_select")
 
     if secim == "🤖 Otomatik Model Eğitimi & Açıklama (Genel)":
         auto_model_module.render(df, state_prefix="ds")

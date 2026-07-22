@@ -16,9 +16,34 @@ from cv_analysis import (
     hire_likelihood,
     match_cv_to_job,
     match_multiple_jobs,
+    skill_development_tips,
 )
 from export_utils import build_pdf, to_json_bytes
 from theme import CATEGORICAL, STATUS, apply_layout, risk_status
+
+ORNEK_CV_METNI = (
+    "Ayşe Demir\n"
+    "E-posta: ayse.demir@example.com | Telefon: 0532 111 22 33\n\n"
+    "Deneyim\n"
+    "6 yıllık iş deneyimim boyunca veri analizi ve raporlama projelerinde çalıştım.\n"
+    "Python, SQL, Power BI ve Tableau kullanarak veri görselleştirme ve makine öğrenmesi "
+    "projeleri yürüttüm. Bir projede %25 verimlilik artışı sağladım.\n\n"
+    "Eğitim\n"
+    "Yüksek Lisans, Bilgisayar Mühendisliği — Boğaziçi Üniversitesi\n\n"
+    "Beceriler\n"
+    "Python, SQL, Power BI, Tableau, makine öğrenmesi, veri analizi, istatistik, "
+    "iletişim becerileri, takım çalışması\n\n"
+    "İngilizce biliyorum. Veri Bilimi sertifikası almış bulunuyorum."
+)
+
+
+def _friendly_read_error(exc: Exception) -> str:
+    """Dosya okuma hatalarını ham exception yerine kısa, yönlendirici bir mesaja çevirir."""
+    return (
+        "Dosya okunamadı. Dosyanın bozuk olmadığından, şifreli/parola korumalı olmadığından "
+        "ve gerçekten seçilen formatta (PDF/DOCX/TXT) olduğundan emin olun. "
+        f"(Teknik detay: {exc})"
+    )
 
 
 def render():
@@ -41,26 +66,40 @@ def _render_single_cv():
         "PDF, DOCX veya TXT formatında bir CV yükleyin. Analiz anahtar kelime tabanlı sezgisel bir "
         "yöntemle yapılır; harici bir dil modeli API'sine bağımlı değildir."
     )
-    cv_file = st.file_uploader("CV dosyası", type=["pdf", "docx", "txt"], key="cv_upload")
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        cv_file = st.file_uploader("CV dosyası", type=["pdf", "docx", "txt"], key="cv_upload")
+    with c2:
+        st.write("")
+        st.write("")
+        ornek_clicked = st.button("🔎 Örnek Dene", key="cv_example_btn", width="stretch")
+
+    if ornek_clicked:
+        st.session_state["cv_text"] = ORNEK_CV_METNI
+        st.session_state["cv_name"] = "ornek_cv.txt"
 
     if cv_file is not None:
         try:
-            text = extract_text(cv_file)
+            with st.spinner("CV metni çıkarılıyor..."):
+                text = extract_text(cv_file)
             if not text.strip():
                 st.warning("Dosyadan metin çıkarılamadı (taranmış görsel PDF olabilir).")
             else:
                 st.session_state["cv_text"] = text
                 st.session_state["cv_name"] = cv_file.name
         except Exception as exc:
-            st.error(f"Dosya okunamadı: {exc}")
+            st.error(_friendly_read_error(exc))
 
     if "cv_text" not in st.session_state:
-        st.info("Devam etmek için bir CV dosyası yükleyin.")
+        st.info("Devam etmek için bir CV dosyası yükleyin veya 'Örnek Dene' ile hemen deneyin.")
         return
 
     result = analyze_cv(st.session_state["cv_text"])
     file_name = st.session_state["cv_name"]
-    st.success(f"Analiz edilen dosya: **{file_name}**")
+    if result.get("name"):
+        st.success(f"Analiz edilen aday: **{result['name']}** ({file_name})")
+    else:
+        st.success(f"Analiz edilen dosya: **{file_name}**")
 
     with st.container(border=True):
         c1, c2, c3 = st.columns(3)
@@ -133,6 +172,11 @@ def _render_single_cv():
                     st.markdown("**❌ Eksik Beceriler**")
                     st.write(", ".join(match["missing_skills"]) if match["missing_skills"] else "—")
 
+                if match["missing_skills"]:
+                    st.markdown("**📚 Gelişim Önerileri**")
+                    for tip in skill_development_tips(match["missing_skills"]):
+                        st.markdown(f"- {tip}")
+
                 if match["required_experience"] is not None:
                     if match["candidate_experience"] is not None:
                         durum = "✅ Karşılıyor" if match["experience_met"] else "⚠️ Karşılamıyor"
@@ -168,6 +212,11 @@ def _render_single_cv():
                     {"heading": "Eşleşen Beceriler", "type": "bullets", "content": match["matched_skills"] or ["—"]},
                     {"heading": "Eksik Beceriler", "type": "bullets", "content": match["missing_skills"] or ["—"]},
                 ]
+                if match["missing_skills"]:
+                    match_blocks.append({
+                        "heading": "Gelişim Önerileri", "type": "bullets",
+                        "content": skill_development_tips(match["missing_skills"]),
+                    })
                 pdf_bytes = build_pdf(f"İlan Eşleştirme Raporu — {file_name}", match_blocks)
                 st.download_button(
                     "PDF indir", data=pdf_bytes,
@@ -235,19 +284,20 @@ def _render_compare_cvs():
         return
 
     candidates = []
-    for f in files:
-        try:
-            text = extract_text(f)
-        except Exception as exc:
-            st.warning(f"**{f.name}** okunamadı: {exc}")
-            continue
-        if not text.strip():
-            st.warning(f"**{f.name}** dosyasından metin çıkarılamadı (taranmış görsel PDF olabilir).")
-            continue
+    with st.spinner(f"{len(files)} CV işleniyor..."):
+        for f in files:
+            try:
+                text = extract_text(f)
+            except Exception:
+                st.warning(f"**{f.name}** okunamadı: dosya bozuk olabilir veya beklenmeyen bir formatta.")
+                continue
+            if not text.strip():
+                st.warning(f"**{f.name}** dosyasından metin çıkarılamadı (taranmış görsel PDF olabilir).")
+                continue
 
-        result = analyze_cv(text)
-        match = match_cv_to_job(text, job_text) if job_text.strip() else None
-        candidates.append({"dosya": f.name, "text": text, "result": result, "match": match})
+            result = analyze_cv(text)
+            match = match_cv_to_job(text, job_text) if job_text.strip() else None
+            candidates.append({"dosya": f.name, "text": text, "result": result, "match": match})
 
     if not candidates:
         st.warning("Hiçbir dosyadan geçerli metin çıkarılamadı.")
@@ -264,6 +314,7 @@ def _render_compare_cvs():
         m = c["match"]
         row = {
             "Dosya": c["dosya"],
+            "Aday": r.get("name") or "—",
             "Deneyim (yıl)": r["experience_years"] if r["experience_years"] else "—",
             "Eğitim": r["education"] or "—",
             "Beceri Sayısı": len(r["all_skills"]),
@@ -311,7 +362,8 @@ def _render_compare_cvs():
         best_pos = top_r["position_suggestions"][0]
         explanation_lines.append(f"En çok öne çıkan tahmini pozisyon: **{best_pos['Pozisyon']}** (uygunluk skoru: {best_pos['Uygunluk Skoru']}).")
 
-    st.success(f"🏆 En uygun aday: **{top['Dosya']}** — {sort_key_label}: {top[sort_key_label]}")
+    top_label = f"{top['Aday']} ({top['Dosya']})" if top["Aday"] != "—" else top["Dosya"]
+    st.success(f"🏆 En uygun aday: **{top_label}** — {sort_key_label}: {top[sort_key_label]}")
 
     with st.container(border=True):
         format_map = {"Uygunluk %": "{:.0f}", "Tahmini İşe Uygunluk Olasılığı (%)": "{:.0f}"}
@@ -330,7 +382,8 @@ def _render_compare_cvs():
     st.markdown("### Aday Detayları")
     for c in candidates:
         r = c["result"]
-        with st.expander(c["dosya"]):
+        expander_label = f"{r['name']} ({c['dosya']})" if r.get("name") else c["dosya"]
+        with st.expander(expander_label):
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Deneyim", f"{r['experience_years']} yıl" if r["experience_years"] else "—")
             c2.metric("Eğitim Düzeyi", r["education"] or "—")

@@ -81,13 +81,19 @@ def render(emp: pd.DataFrame):
         "son_terfiden_beri_ortalama_yil": float(emp["SonTerfidenBeriGecenYil"].mean()),
         "kademeye_gore_hisse_opsiyonu": level_stock.to_dict(orient="records"),
     }
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     with c1:
+        st.download_button(
+            "Hisse Opsiyonu Tablosunu CSV indir",
+            data=level_stock.to_csv(index=False).encode("utf-8"),
+            file_name="maas_hisse_opsiyonu_tablosu.csv", mime="text/csv", key="salary_csv",
+        )
+    with c2:
         st.download_button(
             "JSON indir", data=to_json_bytes(summary),
             file_name="maas_kariyer_analizi.json", mime="application/json", key="salary_json",
         )
-    with c2:
+    with c3:
         pdf_bytes = build_pdf("Maaş ve Kariyer Analizi Raporu", [
             {"heading": "Özet", "type": "bullets", "content": [
                 f"Ortalama aylık gelir: {emp['AylikGelir'].mean():,.0f} $",

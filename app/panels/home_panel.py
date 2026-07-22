@@ -12,13 +12,6 @@ from theme import CATEGORICAL
 
 MODULE_CARDS = [
     {
-        "key": "predict",
-        "icon": "🔮",
-        "title": "Tahmin",
-        "description": "Çalışan kaybı (attrition) riskini LightGBM tabanlı model ile tahmin eder ve SHAP ile açıklar.",
-        "color": CATEGORICAL[0],
-    },
-    {
         "key": "dataset",
         "icon": "📁",
         "title": "Dataset Analizi",
@@ -42,7 +35,7 @@ MODULE_CARDS = [
 ]
 
 QUICK_FACTS = [
-    ("🧩", "4", "Analiz Modülü"),
+    ("🧩", "3", "Analiz Modülü"),
     ("🔒", "0", "Harici AI API Bağımlılığı"),
     ("🌳", "LightGBM", "Gerçek ML Modeli"),
 ]

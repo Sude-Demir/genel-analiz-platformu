@@ -12,7 +12,8 @@ from theme import STATUS, apply_layout
 def render(emp: pd.DataFrame, pipeline, explainer):
     X_all = emp[CATEGORICAL_FEATURES + NUMERIC_FEATURES]
     emp = emp.copy()
-    emp["RiskSkoru"] = pipeline.predict_proba(X_all)[:, 1]
+    with st.spinner("Tüm çalışanlar için risk skorları hesaplanıyor..."):
+        emp["RiskSkoru"] = pipeline.predict_proba(X_all)[:, 1]
 
     tab1, tab2, tab3 = st.tabs(["İlgi Gerektiren Çalışanlar", "Toplu Senaryo Simülasyonu", "Tekil Çalışan Senaryosu"])
 
@@ -32,7 +33,8 @@ def render(emp: pd.DataFrame, pipeline, explainer):
         else:
             display_n = min(len(at_risk), 30)
             subset = at_risk.head(display_n)
-            contrib_df = explain_batch(pipeline, explainer, subset[CATEGORICAL_FEATURES + NUMERIC_FEATURES])
+            with st.spinner(f"{display_n} çalışan için aksiyon önerileri hesaplanıyor..."):
+                contrib_df = explain_batch(pipeline, explainer, subset[CATEGORICAL_FEATURES + NUMERIC_FEATURES])
 
             rows = []
             for idx in subset.index:
