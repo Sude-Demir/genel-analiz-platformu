@@ -19,6 +19,7 @@ from cv_analysis import (
     skill_development_tips,
 )
 from export_utils import build_pdf, to_json_bytes
+from i18n import t
 from theme import CATEGORICAL, STATUS, apply_layout, risk_status
 
 ORNEK_CV_METNI = (
@@ -48,31 +49,29 @@ def _friendly_read_error(exc: Exception) -> str:
 
 def render():
     mod = st.radio(
-        "Mod", ["📄 Tek CV Analizi", "📊 Çoklu CV Karşılaştırma", "🆓 ATS & Derin Analiz"],
+        t("cv_mod"),
+        [t("cv_mod_tek"), t("cv_mod_coklu"), t("cv_mod_derin")],
         horizontal=True, key="cv_mode",
     )
     st.divider()
-    if mod == "📄 Tek CV Analizi":
+    if mod == t("cv_mod_tek"):
         _render_single_cv()
-    elif mod == "📊 Çoklu CV Karşılaştırma":
+    elif mod == t("cv_mod_coklu"):
         _render_compare_cvs()
     else:
         _render_deep_analysis()
 
 
 def _render_single_cv():
-    st.subheader("CV Yükle")
-    st.caption(
-        "PDF, DOCX veya TXT formatında bir CV yükleyin. Analiz anahtar kelime tabanlı sezgisel bir "
-        "yöntemle yapılır; harici bir dil modeli API'sine bağımlı değildir."
-    )
+    st.subheader(t("cv_yukle_baslik"))
+    st.caption(t("cv_yukle_caption"))
     c1, c2 = st.columns([3, 1])
     with c1:
-        cv_file = st.file_uploader("CV dosyası", type=["pdf", "docx", "txt"], key="cv_upload")
+        cv_file = st.file_uploader(t("cv_dosya_label"), type=["pdf", "docx", "txt"], key="cv_upload")
     with c2:
         st.write("")
         st.write("")
-        ornek_clicked = st.button("🔎 Örnek Dene", key="cv_example_btn", width="stretch")
+        ornek_clicked = st.button(t("ornek_dene"), key="cv_example_btn", width="stretch")
 
     if ornek_clicked:
         st.session_state["cv_text"] = ORNEK_CV_METNI
@@ -80,10 +79,10 @@ def _render_single_cv():
 
     if cv_file is not None:
         try:
-            with st.spinner("CV metni çıkarılıyor..."):
+            with st.spinner(t("cv_cikarma_spinner")):
                 text = extract_text(cv_file)
             if not text.strip():
-                st.warning("Dosyadan metin çıkarılamadı (taranmış görsel PDF olabilir).")
+                st.warning(t("cv_gorsel_pdf_uyari"))
             else:
                 st.session_state["cv_text"] = text
                 st.session_state["cv_name"] = cv_file.name
@@ -91,26 +90,27 @@ def _render_single_cv():
             st.error(_friendly_read_error(exc))
 
     if "cv_text" not in st.session_state:
-        st.info("Devam etmek için bir CV dosyası yükleyin veya 'Örnek Dene' ile hemen deneyin.")
+        st.info(t("cv_info_yukle"))
         return
 
     result = analyze_cv(st.session_state["cv_text"])
     file_name = st.session_state["cv_name"]
     if result.get("name"):
-        st.success(f"Analiz edilen aday: **{result['name']}** ({file_name})")
+        st.success(t("cv_aday", name=result["name"], file=file_name))
     else:
-        st.success(f"Analiz edilen dosya: **{file_name}**")
+        st.success(t("cv_dosya_msg", file=file_name))
 
     with st.container(border=True):
         c1, c2, c3 = st.columns(3)
-        c1.metric("Tahmini Deneyim", f"{result['experience_years']} yıl" if result["experience_years"] else "—")
-        c2.metric("Eğitim Düzeyi", result["education"] or "—")
-        c3.metric("Tespit Edilen Beceri Sayısı", len(result["all_skills"]))
+        c1.metric(t("cv_tahmini_deneyim"), t("cv_yil", n=result["experience_years"]) if result["experience_years"] else "—")
+        c2.metric(t("cv_egitim_duzeyi"), result["education"] or "—")
+        c3.metric(t("cv_beceri_sayisi"), len(result["all_skills"]))
 
-        st.markdown("**İletişim Bilgileri**")
-        st.write(f"E-posta: {result['contact']['email'] or 'Tespit edilemedi'} | Telefon: {result['contact']['phone'] or 'Tespit edilemedi'}")
+        st.markdown(t("cv_iletisim"))
+        not_det = t("cv_tespit_edilemedi")
+        st.write(f"E-posta: {result['contact']['email'] or not_det} | Telefon: {result['contact']['phone'] or not_det}")
 
-    st.markdown("### Tespit Edilen Beceriler")
+    st.markdown(t("cv_beceriler_baslik"))
     skill_rows = []
     if result["skills"]:
         skill_rows = [{"Alan": g, "Beceriler": ", ".join(kws), "Adet": len(kws)} for g, kws in result["skills"].items()]
@@ -120,40 +120,40 @@ def _render_single_cv():
         apply_layout(fig, showlegend=False)
         st.plotly_chart(fig, width="stretch", theme=None)
     else:
-        st.info("Beceri anahtar kelimesi tespit edilemedi.")
+        st.info(t("cv_beceri_yok"))
 
     left, right = st.columns(2)
     with left:
-        st.markdown("### 💪 Güçlü Yönler")
+        st.markdown(t("cv_guclu"))
         for s in result["strengths"]:
             st.markdown(f"- {s}")
     with right:
-        st.markdown("### 🔧 Gelişime Açık Yönler")
+        st.markdown(t("cv_zayif"))
         for w in result["weaknesses"]:
             st.markdown(f"- {w}")
 
-    st.markdown("### 🎯 Uygun Pozisyon Önerileri")
+    st.markdown(t("cv_pozisyon_onerileri"))
     if result["position_suggestions"]:
         st.dataframe(pd.DataFrame(result["position_suggestions"]), width="stretch", hide_index=True)
     else:
-        st.info("Yeterli beceri anahtar kelimesi bulunamadığı için pozisyon önerisi üretilemedi.")
+        st.info(t("cv_pozisyon_yok"))
 
-    st.markdown("### 🎯 İlana Göre Eşleştirme")
-    st.caption("Bir iş ilanı metni yapıştırın; CV'deki beceriler ilanla karşılaştırılıp uygunluk yüzdesi hesaplanır.")
-    job_text = st.text_area("İş ilanı metni", height=150, key="cv_job_text")
+    st.markdown(t("cv_ilan_eslesme_baslik"))
+    st.caption(t("cv_ilan_caption"))
+    job_text = st.text_area(t("cv_ilan_label"), height=150, key="cv_job_text")
 
     match = None
     if job_text.strip():
         match = match_cv_to_job(st.session_state["cv_text"], job_text)
         if match["match_pct"] is None:
-            st.warning("İlan metninde tanınan beceri anahtar kelimesi bulunamadı.")
+            st.warning(t("cv_ilan_beceri_yok"))
         else:
             with st.container(border=True):
                 status = risk_status(1 - match["match_pct"] / 100)
                 c1, c2, c3 = st.columns(3)
-                c1.metric("Uygunluk Skoru", f"%{match['match_pct']}")
-                c2.metric("Eşleşen Beceri", len(match["matched_skills"]))
-                c3.metric("Eksik Beceri", len(match["missing_skills"]))
+                c1.metric(t("cv_uygunluk_skoru"), f"%{match['match_pct']}")
+                c2.metric(t("cv_eslesen_beceri"), len(match["matched_skills"]))
+                c3.metric(t("cv_eksik_beceri"), len(match["missing_skills"]))
 
                 fig = go.Figure(go.Indicator(
                     mode="gauge+number",
@@ -166,14 +166,14 @@ def _render_single_cv():
 
                 left, right = st.columns(2)
                 with left:
-                    st.markdown("**✅ Eşleşen Beceriler**")
+                    st.markdown(t("cv_eslesen_beceriler_label"))
                     st.write(", ".join(match["matched_skills"]) if match["matched_skills"] else "—")
                 with right:
-                    st.markdown("**❌ Eksik Beceriler**")
+                    st.markdown(t("cv_eksik_beceriler_label"))
                     st.write(", ".join(match["missing_skills"]) if match["missing_skills"] else "—")
 
                 if match["missing_skills"]:
-                    st.markdown("**📚 Gelişim Önerileri**")
+                    st.markdown(t("cv_gelisim_onerileri"))
                     for tip in skill_development_tips(match["missing_skills"]):
                         st.markdown(f"- {tip}")
 
@@ -203,7 +203,7 @@ def _render_single_cv():
             c1, c2 = st.columns(2)
             with c1:
                 st.download_button(
-                    "JSON indir", data=to_json_bytes(match),
+                    t("json_indir"), data=to_json_bytes(match),
                     file_name=f"{file_name}_ilan_eslesme.json", mime="application/json", key="cv_match_json",
                 )
             with c2:
@@ -219,17 +219,17 @@ def _render_single_cv():
                     })
                 pdf_bytes = build_pdf(f"İlan Eşleştirme Raporu — {file_name}", match_blocks)
                 st.download_button(
-                    "PDF indir", data=pdf_bytes,
+                    t("pdf_indir"), data=pdf_bytes,
                     file_name=f"{file_name}_ilan_eslesme.pdf", mime="application/pdf", key="cv_match_pdf",
                 )
     else:
-        st.info("Eşleştirme sonucu görmek için yukarıya bir ilan metni yapıştırın.")
+        st.info(t("cv_eslesme_info"))
 
-    st.markdown("### Dışa Aktar")
+    st.markdown(t("dis_aktar"))
     c1, c2 = st.columns(2)
     with c1:
         st.download_button(
-            "JSON indir", data=to_json_bytes({"dosya": file_name, **result}),
+            t("json_indir"), data=to_json_bytes({"dosya": file_name, **result}),
             file_name=f"{file_name}_analiz.json", mime="application/json", key="cv_json",
         )
     with c2:
@@ -257,30 +257,23 @@ def _render_single_cv():
             )})
         pdf_bytes = build_pdf(f"CV Analiz Raporu — {file_name}", blocks)
         st.download_button(
-            "PDF indir", data=pdf_bytes,
+            t("pdf_indir"), data=pdf_bytes,
             file_name=f"{file_name}_analiz.pdf", mime="application/pdf", key="cv_pdf",
         )
 
-    st.caption(
-        "Not: Bu analiz anahtar kelime tabanlı sezgisel bir yöntemle üretilmiştir; "
-        "bir ön değerlendirme olarak kullanılmalı, nihai karar için insan incelemesi yapılmalıdır."
-    )
+    st.caption(t("cv_not"))
 
 
 def _render_compare_cvs():
-    st.subheader("Birden Fazla CV Yükle ve Karşılaştır")
-    st.caption(
-        "PDF, DOCX veya TXT formatında birden fazla CV yükleyin. Aşağıya bir iş ilanı metni "
-        "yapıştırırsanız adaylar o ilana uygunluk yüzdesine göre; yapıştırmazsanız beceri sayısı, "
-        "deneyim ve eğitim düzeyinden oluşan genel bir güç skoruna göre sıralanır."
-    )
+    st.subheader(t("cv_karsilastirma_baslik"))
+    st.caption(t("cv_karsilastirma_caption"))
     files = st.file_uploader(
-        "CV dosyaları", type=["pdf", "docx", "txt"], accept_multiple_files=True, key="cv_compare_upload",
+        t("cv_dosya_label"), type=["pdf", "docx", "txt"], accept_multiple_files=True, key="cv_compare_upload",
     )
-    job_text = st.text_area("İş ilanı metni (opsiyonel)", height=120, key="cv_compare_job_text")
+    job_text = st.text_area(t("cv_ilan_opsiyonel"), height=120, key="cv_compare_job_text")
 
     if not files:
-        st.info("Devam etmek için en az iki CV dosyası yükleyin.")
+        st.info(t("cv_karsilastirma_info"))
         return
 
     candidates = []
@@ -385,8 +378,8 @@ def _render_compare_cvs():
         expander_label = f"{r['name']} ({c['dosya']})" if r.get("name") else c["dosya"]
         with st.expander(expander_label):
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Deneyim", f"{r['experience_years']} yıl" if r["experience_years"] else "—")
-            c2.metric("Eğitim Düzeyi", r["education"] or "—")
+            c1.metric(t("cv_tahmini_deneyim"), t("cv_yil", n=r["experience_years"]) if r["experience_years"] else "—")
+            c2.metric(t("cv_egitim_duzeyi"), r["education"] or "—")
             c3.metric("Genel Skor", general_score(r))
             c4.metric("Tahmini İşe Uygunluk Olasılığı", f"%{hire_likelihood(r, c['match'])}")
 
@@ -395,15 +388,15 @@ def _render_compare_cvs():
                 for p in r["position_suggestions"][:3]:
                     st.markdown(f"- **{p['Pozisyon']}** (uygunluk skoru: {p['Uygunluk Skoru']}) — {p['Eşleşen Beceriler']}")
             else:
-                st.caption("Yeterli beceri anahtar kelimesi bulunamadığı için pozisyon tahmini üretilemedi.")
+                st.caption(t("cv_pozisyon_yok"))
 
             left, right = st.columns(2)
             with left:
-                st.markdown("**💪 Güçlü Yönler**")
+                st.markdown(t("cv_guclu"))
                 for s in r["strengths"]:
                     st.markdown(f"- {s}")
             with right:
-                st.markdown("**🔧 Gelişime Açık Yönler**")
+                st.markdown(t("cv_zayif"))
                 for w in r["weaknesses"]:
                     st.markdown(f"- {w}")
 
@@ -413,13 +406,13 @@ def _render_compare_cvs():
                 st.markdown(f"**İlana Uygunluk:** :{'green' if status=='good' else 'orange' if status in ('warning','serious') else 'red'}[%{m['match_pct']}]")
                 mleft, mright = st.columns(2)
                 with mleft:
-                    st.markdown("**✅ Eşleşen Beceriler**")
+                    st.markdown(t("cv_eslesen_beceriler_label"))
                     st.write(", ".join(m["matched_skills"]) if m["matched_skills"] else "—")
                 with mright:
-                    st.markdown("**❌ Eksik Beceriler**")
+                    st.markdown(t("cv_eksik_beceriler_label"))
                     st.write(", ".join(m["missing_skills"]) if m["missing_skills"] else "—")
 
-    st.markdown("### Dışa Aktar")
+    st.markdown(t("dis_aktar"))
     export_records = []
     for _, row in comparison_df.iterrows():
         export_records.append(row.to_dict())
@@ -427,7 +420,7 @@ def _render_compare_cvs():
     c1, c2 = st.columns(2)
     with c1:
         st.download_button(
-            "JSON indir", data=to_json_bytes({
+            t("json_indir"), data=to_json_bytes({
                 "siralama_olcutu": sort_key_label,
                 "adaylar": export_records,
                 "en_uygun_aday": top["Dosya"],
@@ -445,7 +438,7 @@ def _render_compare_cvs():
         ]
         pdf_bytes = build_pdf("CV Karşılaştırma Raporu", pdf_blocks)
         st.download_button(
-            "PDF indir", data=pdf_bytes,
+            t("pdf_indir"), data=pdf_bytes,
             file_name="cv_karsilastirma.pdf", mime="application/pdf", key="cv_compare_pdf",
         )
 
@@ -453,10 +446,7 @@ def _render_compare_cvs():
     for line in explanation_lines:
         st.markdown(f"- {line}")
 
-    st.caption(
-        "Not: Bu karşılaştırma ve tahminler anahtar kelime tabanlı sezgisel bir yöntemle üretilmiştir; "
-        "bir ön değerlendirme olarak kullanılmalı, nihai karar için insan incelemesi yapılmalıdır."
-    )
+    st.caption(t("cv_not"))
 
 
 def _parse_job_postings(text: str) -> list[str]:
@@ -465,14 +455,8 @@ def _parse_job_postings(text: str) -> list[str]:
 
 
 def _render_deep_analysis():
-    st.subheader("🆓 ATS Uyumu & Derin Analiz")
-    st.caption(
-        "ATS uyum skoru, deneyim/unvan tutarsızlığı tespiti, ilan listesine göre gerekçeli "
-        "eşleştirme ve yinelenen aday kontrolü — tamamen kural tabanlı, **ücretsiz** ve harici "
-        "hiçbir API'ye bağımlı değil (ATS format kontrolü açık kaynak OpenResume'un yaklaşımından "
-        "esinlenmiştir). Diğer modlar gibi bir ön değerlendirmedir; nihai karar için insan "
-        "incelemesi önerilir."
-    )
+    st.subheader(t("cv_derin_baslik"))
+    st.caption(t("cv_derin_caption"))
 
     # Karşılaştırma sekmesindeki dosyalar mevcutsa, metinlerini hemen widget'a bağlı
     # OLMAYAN bir session_state anahtarına anlık görüntü olarak kaydediyoruz: Streamlit,
@@ -494,20 +478,16 @@ def _render_deep_analysis():
 
     candidate_pool = st.session_state.get("cv_deep_candidate_pool")
     if not candidate_pool:
-        st.info(
-            "Bu özellik, **📊 Çoklu CV Karşılaştırma** sekmesinde yüklediğiniz CV'leri kullanır "
-            "(diğer adaylar, yinelenen aday kontrolü için havuz oluşturur). Lütfen önce o sekmede "
-            "en az bir CV yükleyin."
-        )
+        st.info(t("cv_deep_pool_info"))
         return
 
     file_names = list(candidate_pool.keys())
-    subject_name = st.selectbox("Derin analiz edilecek CV", file_names, key="cv_deep_subject")
+    subject_name = st.selectbox(t("cv_deep_sec"), file_names, key="cv_deep_subject")
     job_text = st.text_area(
-        "İş ilanları (birden fazla ilanı '---' ile ayırın, opsiyonel)", height=180, key="cv_deep_job_postings",
+        t("cv_deep_ilan_label"), height=180, key="cv_deep_job_postings",
     )
 
-    if not st.button("Analiz Et", type="primary", key="cv_deep_analyze_btn"):
+    if not st.button(t("analiz_et"), type="primary", key="cv_deep_analyze_btn"):
         return
 
     subject_text = candidate_pool[subject_name]
@@ -583,11 +563,11 @@ def _render_deep_analysis():
     else:
         st.success(yinelenen["aciklama"] or "Yinelenen aday bulunamadı.")
 
-    st.markdown("### Dışa Aktar")
+    st.markdown(t("dis_aktar"))
     c1, c2 = st.columns(2)
     with c1:
         st.download_button(
-            "JSON indir", data=to_json_bytes({"aday": subject_name, **result}),
+            t("json_indir"), data=to_json_bytes({"aday": subject_name, **result}),
             file_name=f"{subject_name}_derin_analiz.json", mime="application/json", key="cv_deep_json",
         )
     with c2:
@@ -603,11 +583,8 @@ def _render_deep_analysis():
         ]
         pdf_bytes = build_pdf(f"CV Derin Analiz Raporu — {subject_name}", pdf_blocks)
         st.download_button(
-            "PDF indir", data=pdf_bytes,
+            t("pdf_indir"), data=pdf_bytes,
             file_name=f"{subject_name}_derin_analiz.pdf", mime="application/pdf", key="cv_deep_pdf",
         )
 
-    st.caption(
-        "Not: Bu analiz anahtar kelime ve kural tabanlı sezgisel bir yöntemle üretilmiştir; "
-        "bir ön değerlendirme olarak kullanılmalı, nihai karar için insan incelemesi yapılmalıdır."
-    )
+    st.caption(t("cv_not"))

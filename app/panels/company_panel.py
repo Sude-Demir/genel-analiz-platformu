@@ -6,6 +6,7 @@ import streamlit as st
 
 from company_analysis import build_dataframe, extract_topics, reputation_score, sentiment_timeline
 from export_utils import build_pdf, to_json_bytes
+from i18n import t
 from theme import CATEGORICAL, MUTED, STATUS, apply_layout
 
 CACHE_TTL_SECONDS = 1800  # aynı şirket adı için tekrar tıklamada yeniden taramayı önler
@@ -20,27 +21,24 @@ def _cached_scan(company: str):
 
 
 def render():
-    st.subheader("Şirket Adı ile Web / Sosyal Medya Analizi")
-    st.caption(
-        "Google Haberler ve genel web araması üzerinden şirketle ilgili haber/yorum/gönderi başlıklarını tarar, "
-        "sözlük tabanlı duygu analizi yapar ve öne çıkan konuları çıkarır. İnternet bağlantısı gerektirir."
-    )
+    st.subheader(t("company_baslik"))
+    st.caption(t("company_caption"))
 
     c1, c2 = st.columns([3, 1])
     with c1:
-        company = st.text_input("Şirket Adı", placeholder="Örn: Turkcell", key="company_name_input")
+        company = st.text_input(t("company_sirket_adi"), placeholder=t("company_placeholder"), key="company_name_input")
     with c2:
         st.write("")
         st.write("")
-        ornek_clicked = st.button("🔎 Örnek Dene", key="company_example_btn", width="stretch")
-    analyze_clicked = st.button("Analiz Et", type="primary", disabled=not company.strip(), key="company_analyze_btn")
+        ornek_clicked = st.button(t("ornek_dene"), key="company_example_btn", width="stretch")
+    analyze_clicked = st.button(t("analiz_et"), type="primary", disabled=not company.strip(), key="company_analyze_btn")
 
     if ornek_clicked:
         company = ORNEK_SIRKET
 
     if (analyze_clicked and company.strip()) or ornek_clicked:
         target = company.strip() or ORNEK_SIRKET
-        with st.spinner(f"'{target}' için web ve haber kaynakları taranıyor..."):
+        with st.spinner(t("company_spinner", target=target)):
             df, topics, warnings = _cached_scan(target)
         st.session_state["company_name"] = target
         st.session_state["company_df"] = df
@@ -48,7 +46,7 @@ def render():
         st.session_state["company_warnings"] = warnings
 
     if "company_df" not in st.session_state:
-        st.info("Analiz başlatmak için bir şirket adı girip 'Analiz Et' butonuna tıklayın veya 'Örnek Dene' ile hemen deneyin.")
+        st.info(t("company_info"))
         return
 
     company_name = st.session_state["company_name"]
@@ -57,22 +55,22 @@ def render():
     warnings = st.session_state["company_warnings"]
 
     if df.empty:
-        st.warning(f"'{company_name}' için hiçbir kaynak bulunamadı. Şirket adını farklı yazarak tekrar deneyin.")
+        st.warning(t("company_bos_uyari", name=company_name))
         return
 
-    st.success(f"'{company_name}' için {len(df)} kaynak bulundu.")
+    st.success(t("company_bulundu", name=company_name, n=len(df)))
 
     score, status = reputation_score(df)
 
     with st.container(border=True):
         counts = df["duygu"].value_counts()
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Toplam Kaynak", len(df))
-        c2.metric("Pozitif", int(counts.get("Pozitif", 0)))
-        c3.metric("Nötr", int(counts.get("Nötr", 0)))
-        c4.metric("Negatif", int(counts.get("Negatif", 0)))
+        c1.metric(t("company_toplam_kaynak"), len(df))
+        c2.metric(t("company_pozitif"), int(counts.get("Pozitif", 0)))
+        c3.metric(t("company_notr"), int(counts.get("Nötr", 0)))
+        c4.metric(t("company_negatif"), int(counts.get("Negatif", 0)))
 
-        st.markdown("**İtibar Puanı**")
+        st.markdown(t("company_itibar_puani"))
         fig_score = go.Figure(go.Indicator(
             mode="gauge+number", value=score,
             gauge={"axis": {"range": [0, 100]}, "bar": {"color": STATUS[status]}},
@@ -82,7 +80,7 @@ def render():
 
         left, right = st.columns(2)
         with left:
-            st.markdown("**Duygu Dağılımı**")
+            st.markdown(t("company_duygu_dagilim"))
             sentiment_colors = {"Pozitif": STATUS["good"], "Nötr": MUTED, "Negatif": STATUS["critical"]}
             order = [s for s in ["Pozitif", "Nötr", "Negatif"] if s in counts.index]
             fig = px.bar(
@@ -93,18 +91,18 @@ def render():
             apply_layout(fig, showlegend=False)
             st.plotly_chart(fig, width="stretch", theme=None)
         with right:
-            st.markdown("**Öne Çıkan Konular**")
+            st.markdown(t("company_one_cikan_konular"))
             if topics:
                 topic_df = pd.DataFrame(topics, columns=["Konu", "Frekans"]).sort_values("Frekans")
                 fig = px.bar(topic_df, x="Frekans", y="Konu", orientation="h", color_discrete_sequence=[CATEGORICAL[4]])
                 apply_layout(fig, showlegend=False)
                 st.plotly_chart(fig, width="stretch", theme=None)
             else:
-                st.info("Öne çıkan konu tespit edilemedi.")
+                st.info(t("company_konu_yok"))
 
     timeline = sentiment_timeline(df)
     if not timeline.empty:
-        st.markdown("### 📈 Zaman İçinde İtibar Trendi")
+        st.markdown(t("company_trend_baslik"))
         with st.container(border=True):
             sentiment_colors = {"Pozitif": STATUS["good"], "Nötr": MUTED, "Negatif": STATUS["critical"]}
             fig_trend = px.bar(
@@ -114,9 +112,9 @@ def render():
             )
             apply_layout(fig_trend, barmode="stack")
             st.plotly_chart(fig_trend, width="stretch", theme=None)
-            st.caption("Yalnızca tarih bilgisi taşıyan (esas olarak Google Haberler) kaynaklar bu grafiğe dahildir.")
+            st.caption(t("company_trend_caption"))
 
-    st.markdown("### Kaynaklar")
+    st.markdown(t("company_kaynaklar"))
     st.dataframe(
         df[["duygu", "başlık", "kaynak", "tür", "tarih", "link"]],
         width="stretch", hide_index=True,
@@ -124,15 +122,15 @@ def render():
     )
 
     if warnings:
-        with st.expander("Tarama Uyarıları"):
+        with st.expander(t("company_tarama_uyarilari")):
             for w in warnings:
                 st.caption(f"⚠️ {w}")
 
-    st.markdown("### Dışa Aktar")
+    st.markdown(t("dis_aktar"))
     c1, c2, c3 = st.columns(3)
     with c1:
         st.download_button(
-            "Kaynak Listesini CSV indir", data=df.to_csv(index=False).encode("utf-8"),
+            t("company_kaynak_csv"), data=df.to_csv(index=False).encode("utf-8"),
             file_name=f"{company_name}_kaynaklar.csv", mime="text/csv", key="company_csv",
         )
     with c2:
@@ -146,7 +144,7 @@ def render():
             "uyarilar": warnings,
         }
         st.download_button(
-            "JSON indir", data=to_json_bytes(json_payload),
+            t("json_indir"), data=to_json_bytes(json_payload),
             file_name=f"{company_name}_analiz.json", mime="application/json", key="company_json",
         )
     with c3:
@@ -168,11 +166,8 @@ def render():
             blocks.append({"heading": "Tarama Uyarıları", "type": "bullets", "content": warnings})
         pdf_bytes = build_pdf(f"Şirket Analiz Raporu — {company_name}", blocks)
         st.download_button(
-            "PDF indir", data=pdf_bytes,
+            t("pdf_indir"), data=pdf_bytes,
             file_name=f"{company_name}_analiz.pdf", mime="application/pdf", key="company_pdf",
         )
 
-    st.caption(
-        "Not: Duygu analizi sözlük tabanlı sezgisel bir yöntemle hesaplanmıştır; "
-        "nihai yorum için kaynakların incelenmesi önerilir."
-    )
+    st.caption(t("company_not"))

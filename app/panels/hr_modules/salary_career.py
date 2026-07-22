@@ -4,21 +4,22 @@ import plotly.express as px
 import streamlit as st
 
 from export_utils import build_pdf, to_json_bytes
+from i18n import t
 from theme import CATEGORICAL, SEQUENTIAL_BLUE, apply_layout
 
 
 def render(emp: pd.DataFrame):
     with st.container(border=True):
         col1, col2, col3 = st.columns(3)
-        col1.metric("Ortalama Aylık Gelir", f"{emp['AylikGelir'].mean():,.0f} $")
-        col2.metric("Ortalama Maaş Artış Oranı", f"%{emp['MaasArtisYuzdesi'].mean():.1f}")
-        col3.metric("Son Terfiden Beri Ortalama Yıl", f"{emp['SonTerfidenBeriGecenYil'].mean():.1f}")
+        col1.metric(t("salary_ort_gelir"), f"{emp['AylikGelir'].mean():,.0f} $")
+        col2.metric(t("salary_ort_artis"), f"%{emp['MaasArtisYuzdesi'].mean():.1f}")
+        col3.metric(t("salary_son_terfi"), f"{emp['SonTerfidenBeriGecenYil'].mean():.1f}")
 
     with st.container(border=True):
         left, right = st.columns(2)
 
         with left:
-            st.subheader("Departmana Göre Aylık Gelir Dağılımı")
+            st.subheader(t("salary_dept_dagilim"))
             fig = px.box(
                 emp, x="Departman", y="AylikGelir",
                 labels={"AylikGelir": "Aylık Gelir ($)"},
@@ -28,7 +29,7 @@ def render(emp: pd.DataFrame):
             st.plotly_chart(fig, width="stretch", theme=None)
 
         with right:
-            st.subheader("Kademeye Göre Aylık Gelir Dağılımı")
+            st.subheader(t("salary_kademe_dagilim"))
             fig = px.box(
                 emp.sort_values("IsSeviyesi"), x="IsSeviyesi", y="AylikGelir",
                 labels={"IsSeviyesi": "Kademe", "AylikGelir": "Aylık Gelir ($)"},
@@ -42,7 +43,7 @@ def render(emp: pd.DataFrame):
         left2, right2 = st.columns(2)
 
         with left2:
-            st.subheader("Kıdem ile Aylık Gelir İlişkisi")
+            st.subheader(t("salary_kidem_iliski"))
             fig = px.scatter(
                 emp, x="SirketteKidemYili", y="AylikGelir", color="Departman",
                 labels={"SirketteKidemYili": "Şirkette Kıdem (Yıl)", "AylikGelir": "Aylık Gelir ($)"},
@@ -52,7 +53,7 @@ def render(emp: pd.DataFrame):
             st.plotly_chart(fig, width="stretch", theme=None)
 
         with right2:
-            st.subheader("Son Terfiden Beri Geçen Yıl Dağılımı")
+            st.subheader(t("salary_terfi_dagilim"))
             fig = px.histogram(
                 emp, x="SonTerfidenBeriGecenYil",
                 labels={"SonTerfidenBeriGecenYil": "Son Terfiden Beri Geçen Yıl"},
@@ -63,7 +64,7 @@ def render(emp: pd.DataFrame):
             st.plotly_chart(fig, width="stretch", theme=None)
 
     with st.container(border=True):
-        st.subheader("Kademeye Göre Ortalama Hisse Opsiyonu Seviyesi")
+        st.subheader(t("salary_hisse_opsiyonu"))
         level_stock = emp.groupby("IsSeviyesi")["HisseOpsiyonSeviyesi"].mean().reset_index()
         level_stock.columns = ["Kademe", "Ortalama Hisse Opsiyonu Seviyesi"]
         fig = px.bar(
@@ -74,7 +75,7 @@ def render(emp: pd.DataFrame):
         apply_layout(fig, showlegend=False)
         st.plotly_chart(fig, width="stretch", theme=None)
 
-    st.markdown("### Dışa Aktar")
+    st.markdown(t("dis_aktar"))
     summary = {
         "ortalama_aylik_gelir": float(emp["AylikGelir"].mean()),
         "ortalama_maas_artis_yuzdesi": float(emp["MaasArtisYuzdesi"].mean()),
@@ -84,13 +85,13 @@ def render(emp: pd.DataFrame):
     c1, c2, c3 = st.columns(3)
     with c1:
         st.download_button(
-            "Hisse Opsiyonu Tablosunu CSV indir",
+            t("salary_csv"),
             data=level_stock.to_csv(index=False).encode("utf-8"),
             file_name="maas_hisse_opsiyonu_tablosu.csv", mime="text/csv", key="salary_csv",
         )
     with c2:
         st.download_button(
-            "JSON indir", data=to_json_bytes(summary),
+            t("json_indir"), data=to_json_bytes(summary),
             file_name="maas_kariyer_analizi.json", mime="application/json", key="salary_json",
         )
     with c3:
@@ -105,6 +106,6 @@ def render(emp: pd.DataFrame):
             )},
         ])
         st.download_button(
-            "PDF indir", data=pdf_bytes,
+            t("pdf_indir"), data=pdf_bytes,
             file_name="maas_kariyer_analizi.pdf", mime="application/pdf", key="salary_pdf",
         )
