@@ -1,26 +1,34 @@
-"""Anasayfa paneli — uygulama ilk açıldığında karşılanan tanıtım/karşılama ekranı.
-
-Diğer panellerin kısa açıklamalarını kart olarak listeler; bir karta tıklanınca
-ilgili panele geçiş yapılır (session_state["active_panel"] güncellenir). Kartların
-ve kahraman (hero) bölümünün stili, st.container(key=...) ile üretilen sabit
-`st-key-*` CSS sınıfları üzerinden hedeflenir (Streamlit'in dahili DOM yapısına
-değil, resmi/kararlı API'sine dayanır).
-"""
+"""Anasayfa paneli — uygulama ilk açıldığında karşılanan tanıtım/karşılama ekranı."""
 import streamlit as st
 
-from i18n import t
+from translator import tr
 from theme import CATEGORICAL
 
-MODULE_CARD_KEYS = [
-    {"key": "dataset", "icon": "📁", "title_key": "home_card_dataset_title", "desc_key": "home_card_dataset_desc", "color": CATEGORICAL[1]},
-    {"key": "cv",      "icon": "📄", "title_key": "home_card_cv_title",      "desc_key": "home_card_cv_desc",      "color": CATEGORICAL[4]},
-    {"key": "company", "icon": "🌐", "title_key": "home_card_company_title", "desc_key": "home_card_company_desc", "color": CATEGORICAL[5]},
+MODULE_CARDS = [
+    {
+        "key": "dataset", "icon": "📁",
+        "title": "Dataset Analizi",
+        "desc": "Herhangi bir veri setini yükleyip genel istatistik, görselleştirme ve İK'ya özgü alt analizler yapar.",
+        "color": CATEGORICAL[1],
+    },
+    {
+        "key": "cv", "icon": "📄",
+        "title": "CV Analizi",
+        "desc": "CV metnini beceri/pozisyon/eğitim sözlükleriyle değerlendirir, ilanla eşleştirme yüzdesi üretir.",
+        "color": CATEGORICAL[4],
+    },
+    {
+        "key": "company", "icon": "🌐",
+        "title": "Şirket Analizi",
+        "desc": "Google/Bing News RSS, Reddit ve DuckDuckGo taramasıyla şirket haberlerinde duygu analizi yapar.",
+        "color": CATEGORICAL[5],
+    },
 ]
 
-QUICK_FACT_KEYS = [
-    ("🧩", "3",        "modul_analiz_sayisi"),
-    ("🔒", "0",        "modul_ai_bagimlilik"),
-    ("🌳", "LightGBM", "modul_ml_model"),
+QUICK_FACTS = [
+    ("🧩", "3",        "Analiz Modülü"),
+    ("🔒", "0",        "Harici AI API Bağımlılığı"),
+    ("🌳", "LightGBM", "Gerçek ML Modeli"),
 ]
 
 
@@ -96,27 +104,33 @@ def _inject_css():
 def render():
     _inject_css()
 
+    hero_subtitle = tr(
+        "İK verisi, CV ve şirket itibarı üzerine çalışan çok modüllü bir analiz aracı. "
+        "Harici bir yapay zekâ servisine bağımlı değildir — analizler kural/sözlük tabanlı "
+        "sezgisel yöntemlerle veya eğitilmiş bir makine öğrenmesi modeliyle yapılır."
+    )
+
     with st.container(key="home_hero"):
         st.markdown(
             f"""
             <div class="home-hero-icon">🧪</div>
-            <div class="home-hero-title">Genel Analiz Platformu</div>
-            <div class="home-hero-sub">{t("hero_subtitle")}</div>
+            <div class="home-hero-title">{tr("Genel Analiz Platformu")}</div>
+            <div class="home-hero-sub">{hero_subtitle}</div>
             """,
             unsafe_allow_html=True,
         )
 
     st.write("")
-    fact_cols = st.columns(len(QUICK_FACT_KEYS))
-    for col, (icon, value, label_key) in zip(fact_cols, QUICK_FACT_KEYS):
-        col.metric(f"{icon} {t(label_key)}", value)
+    fact_cols = st.columns(len(QUICK_FACTS))
+    for col, (icon, value, label) in zip(fact_cols, QUICK_FACTS):
+        col.metric(f"{icon} {tr(label)}", value)
 
     st.write("")
-    st.markdown(t("moduller_baslik"))
-    st.caption(t("moduller_caption"))
+    st.markdown(f"#### {tr('Modüller')}")
+    st.caption(tr("Başlamak için bir kart seçin veya sol menüyü kullanın."))
 
     cols = st.columns(2)
-    for i, module in enumerate(MODULE_CARD_KEYS):
+    for i, module in enumerate(MODULE_CARDS):
         with cols[i % 2]:
             with st.container(border=True, key=f"home_card_{module['key']}"):
                 badge_bg = _hex_to_rgba(module["color"], 0.15)
@@ -124,11 +138,11 @@ def render():
                     f'<div class="home-icon-badge" style="background:{badge_bg};">{module["icon"]}</div>',
                     unsafe_allow_html=True,
                 )
-                st.markdown(f'<div class="home-card-title">{t(module["title_key"])}</div>', unsafe_allow_html=True)
-                st.caption(t(module["desc_key"]))
-                if st.button(t("ac_btn"), key=f"home_open_{module['key']}", width="stretch"):
+                st.markdown(f'<div class="home-card-title">{tr(module["title"])}</div>', unsafe_allow_html=True)
+                st.caption(tr(module["desc"]))
+                if st.button(tr("Aç →"), key=f"home_open_{module['key']}", use_container_width=True):
                     st.session_state["active_panel"] = module["key"]
                     st.rerun()
 
     st.divider()
-    st.caption(t("home_caption"))
+    st.caption(tr("Her panelin sonucu kendi sekmesinde JSON / PDF / CSV olarak dışa aktarılabilir."))

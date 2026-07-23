@@ -12,6 +12,7 @@ models/*.joblib
 
 # Yerel çalışma zamanı çıktıları
 streamlit_run.log
+app/translation_cache.json
 
 # .streamlit/config.toml (tema ayarları) commit'lenir; olası gizli anahtar
 # dosyası commit'lenmez

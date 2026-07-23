@@ -17,7 +17,7 @@ from auto_model import (
     train_auto_model,
 )
 from export_utils import build_pdf, to_json_bytes
-from i18n import t
+from translator import tr
 from theme import CATEGORICAL, apply_layout
 
 
@@ -28,7 +28,7 @@ def render_manual_prediction(df: pd.DataFrame, result: dict, state_prefix: str):
     için veri setindeki benzersiz değerlerden seçim, sayısal özellikler için medyan varsayılanlı
     giriş kutuları üretilir; ardından `result["pipeline"]` ile tahmin yapılır.
     """
-    st.subheader(t("auto_elle_tahmin"))
+    st.subheader(tr("Elle Veri Girerek Tahmin Al"))
 
     categorical_features = result["categorical_features"]
     numeric_features = result["numeric_features"]
@@ -48,7 +48,7 @@ def render_manual_prediction(df: pd.DataFrame, result: dict, state_prefix: str):
 
     input_row = pd.DataFrame([overrides])[categorical_features + numeric_features]
 
-    if st.button(t("auto_tahmin_et_btn"), type="primary", key=f"{state_prefix}_manual_predict_btn"):
+    if st.button(tr("Tahmin Et"), type="primary", key=f"{state_prefix}_manual_predict_btn"):
         pipeline = result["pipeline"]
         with st.container(border=True):
             if result["task_type"] == "classification":
@@ -62,18 +62,19 @@ def render_manual_prediction(df: pd.DataFrame, result: dict, state_prefix: str):
                     pred_label = class_labels[classes_.index(pred_code)]
                 else:
                     pred_label = pred_code
-                st.metric(f"Tahmin Edilen {result['target_col']}", str(pred_label))
+                st.metric(f"{tr('Tahmin Edilen')} {result['target_col']}", str(pred_label))
                 if result.get("n_classes") == 2:
-                    st.caption(f"Pozitif sınıf olasılığı: %{proba[1] * 100:.1f}")
+                    st.caption(tr(f"Pozitif sınıf olasılığı: %{proba[1] * 100:.1f}"))
                 else:
+                    sinif_col, olasilik_col = tr("Sınıf"), tr("Olasılık")
                     proba_df = pd.DataFrame({
-                        "Sınıf": class_labels if class_labels else list(range(len(proba))),
-                        "Olasılık": proba,
-                    }).sort_values("Olasılık", ascending=False)
-                    st.dataframe(proba_df.style.format({"Olasılık": "{:.1%}"}), width="stretch", hide_index=True)
+                        sinif_col: class_labels if class_labels else list(range(len(proba))),
+                        olasilik_col: proba,
+                    }).sort_values(olasilik_col, ascending=False)
+                    st.dataframe(proba_df.style.format({olasilik_col: "{:.1%}"}), width="stretch", hide_index=True)
             else:
                 pred_value = pipeline.predict(input_row)[0]
-                st.metric(f"Tahmin Edilen {result['target_col']}", f"{pred_value:.2f}")
+                st.metric(f"{tr('Tahmin Edilen')} {result['target_col']}", f"{pred_value:.2f}")
 
             if result["task_type"] == "regression" or result.get("n_classes") == 2:
                 explainer = shap.TreeExplainer(pipeline.named_steps["model"])
@@ -82,30 +83,30 @@ def render_manual_prediction(df: pd.DataFrame, result: dict, state_prefix: str):
                 ).iloc[0]
                 top = contrib.reindex(contrib.abs().sort_values(ascending=False).index).head(8).sort_values()
                 colors = ["#d03b3b" if v > 0 else "#0ca30c" for v in top.values]
-                fig = px.bar(top, x=top.values, y=top.index, orientation="h", labels={"x": "Katkı", "y": ""})
+                fig = px.bar(top, x=top.values, y=top.index, orientation="h", labels={"x": tr("Katkı"), "y": ""})
                 fig.update_traces(marker_color=colors)
                 apply_layout(fig, showlegend=False)
                 st.plotly_chart(fig, width="stretch", theme=None)
 
 
 def render(df: pd.DataFrame, state_prefix: str):
-    st.subheader(t("auto_baslik"))
-    st.caption(t("auto_caption"))
+    st.subheader(tr("Otomatik Model Eğitimi ve Açıklama"))
+    st.caption(tr("Seçtiğiniz hedef kolona göre otomatik bir sınıflandırma/regresyon modeli eğitir."))
 
-    target_col = st.selectbox(t("auto_hedef_kolon"), df.columns, index=len(df.columns) - 1, key=f"{state_prefix}_target")
+    target_col = st.selectbox(tr("Hedef Kolon (tahmin edilecek)"), df.columns, index=len(df.columns) - 1, key=f"{state_prefix}_target")
     task_type = detect_task_type(df[target_col])
-    task_label = t("auto_siniflandirma") if task_type == "classification" else t("auto_regresyon")
-    st.caption(t("auto_gorev_turu", task=task_label))
+    task_label = tr("Sınıflandırma") if task_type == "classification" else tr("Regresyon")
+    st.caption(tr(f"Otomatik algılanan görev türü: **{task_label}**"))
 
     result_key = f"{state_prefix}_auto_model_result"
 
-    if st.button(t("auto_egit_btn"), type="primary", key=f"{state_prefix}_train_btn"):
+    if st.button(tr("Modeli Eğit"), type="primary", key=f"{state_prefix}_train_btn"):
         clean_df = df.dropna(subset=[target_col])
         numeric_cols, categorical_cols = infer_column_types(clean_df, exclude=[target_col])
         if not numeric_cols and not categorical_cols:
-            st.error(t("auto_ozellik_yok"))
+            st.error(tr("Hedef kolon dışında kullanılabilir özellik kolonu bulunamadı."))
         else:
-            with st.spinner(t("auto_spinner")):
+            with st.spinner(tr("Model eğitiliyor...")):
                 result = train_auto_model(clean_df, target_col, categorical_cols, numeric_cols)
             st.session_state[result_key] = result
 
@@ -117,20 +118,20 @@ def render(df: pd.DataFrame, state_prefix: str):
     with st.container(border=True):
         if result["task_type"] == "classification":
             m1, m2 = st.columns(2)
-            m1.metric("Doğruluk (Accuracy)", f"{metrics['accuracy']:.1%}")
+            m1.metric(tr("Doğruluk (Accuracy)"), f"{metrics['accuracy']:.1%}")
             m2.metric("ROC-AUC", f"{metrics['roc_auc']:.3f}" if metrics["roc_auc"] is not None else "—")
         else:
             m1, m2 = st.columns(2)
             m1.metric("R²", f"{metrics['r2']:.3f}")
             m2.metric("RMSE", f"{metrics['rmse']:.2f}")
 
-        st.markdown(t("auto_onem_sirasi"))
+        st.markdown(tr("**Özellik Önem Sırası**"))
         importances = get_feature_importances(
             result["pipeline"], result["categorical_features"], result["numeric_features"]
         ).head(15).sort_values()
         fig = px.bar(
             importances, x=importances.values, y=importances.index, orientation="h",
-            labels={"x": "Önem Derecesi", "y": ""},
+            labels={"x": tr("Önem Derecesi"), "y": ""},
             color_discrete_sequence=[CATEGORICAL[0]],
         )
         apply_layout(fig, showlegend=False)
@@ -141,8 +142,8 @@ def render(df: pd.DataFrame, state_prefix: str):
     explanation_row = None
     if result["task_type"] == "regression" or result.get("n_classes") == 2:
         with st.container(border=True):
-            st.markdown(t("auto_shap_baslik"))
-            row_idx = st.selectbox(t("auto_satir_sec"), df.index[:200], key=f"{state_prefix}_row_idx")
+            st.markdown(tr("**Tekil Satır İçin SHAP Açıklaması**"))
+            row_idx = st.selectbox(tr("Açıklanacak satır (index)"), df.index[:200], key=f"{state_prefix}_row_idx")
             X_row = df.loc[[row_idx], result["categorical_features"] + result["numeric_features"]]
 
             explainer = shap.TreeExplainer(result["pipeline"].named_steps["model"])
@@ -152,15 +153,15 @@ def render(df: pd.DataFrame, state_prefix: str):
             ).iloc[0]
             top = contrib.reindex(contrib.abs().sort_values(ascending=False).index).head(10).sort_values()
             colors = ["#d03b3b" if v > 0 else "#0ca30c" for v in top.values]
-            fig2 = px.bar(top, x=top.values, y=top.index, orientation="h", labels={"x": "Katkı", "y": ""})
+            fig2 = px.bar(top, x=top.values, y=top.index, orientation="h", labels={"x": tr("Katkı"), "y": ""})
             fig2.update_traces(marker_color=colors)
             apply_layout(fig2, showlegend=False)
             st.plotly_chart(fig2, width="stretch", theme=None)
             explanation_row = {"satir_index": str(row_idx), "shap_katkilari": top.to_dict()}
     else:
-        st.caption(t("auto_shap_caption"))
+        st.caption(tr("Not: SHAP açıklaması şu an sadece regresyon ve iki sınıflı (binary) sınıflandırma için gösteriliyor."))
 
-    st.markdown(t("dis_aktar"))
+    st.markdown(tr("### Dışa Aktar"))
     export_result = {
         "hedef_kolon": target_col,
         "gorev_turu": result["task_type"],
@@ -171,7 +172,7 @@ def render(df: pd.DataFrame, state_prefix: str):
     c1, c2 = st.columns(2)
     with c1:
         st.download_button(
-            t("json_indir"), data=to_json_bytes(export_result),
+            tr("JSON indir"), data=to_json_bytes(export_result),
             file_name="otomatik_model_sonucu.json", mime="application/json", key=f"{state_prefix}_json",
         )
     with c2:
@@ -185,6 +186,6 @@ def render(df: pd.DataFrame, state_prefix: str):
             )},
         ])
         st.download_button(
-            t("pdf_indir"), data=pdf_bytes,
+            tr("PDF indir"), data=pdf_bytes,
             file_name="otomatik_model_raporu.pdf", mime="application/pdf", key=f"{state_prefix}_pdf",
         )

@@ -1,6 +1,17 @@
+import xml.etree.ElementTree as ET
+
 import pandas as pd
 
-from company_analysis import analyze_sentiment, reputation_score, sentiment_timeline, turkish_lower
+from company_analysis import (
+    _detect_segments,
+    _parse_atom_entries,
+    _parse_standard_rss,
+    analyze_sentiment,
+    reputation_score,
+    segment_outlook,
+    sentiment_timeline,
+    turkish_lower,
+)
 
 
 def test_turkish_lower_handles_dotted_capital_i():
@@ -69,3 +80,153 @@ def test_sentiment_timeline_handles_empty_dataframe():
     df = pd.DataFrame(columns=["başlık", "kaynak", "link", "tarih", "tür", "özet", "duygu", "skor"])
     timeline = sentiment_timeline(df)
     assert timeline.empty
+
+
+def test_parse_standard_rss_uses_source_element_when_present():
+    xml = """<?xml version="1.0"?>
+    <rss><channel>
+      <item>
+        <title>Örnek Haber Başlığı</title>
+        <link>https://example.com/haber</link>
+        <pubDate>Mon, 01 Jan 2024 10:00:00 GMT</pubDate>
+        <source>Örnek Kaynak</source>
+      </item>
+    </channel></rss>"""
+    root = ET.fromstring(xml)
+    items = _parse_standard_rss(root, "Varsayılan Haberler", max_items=8)
+    assert len(items) == 1
+    assert items[0]["başlık"] == "Örnek Haber Başlığı"
+    assert items[0]["kaynak"] == "Örnek Kaynak"
+    assert items[0]["tür"] == "Haber"
+
+
+def test_parse_standard_rss_falls_back_to_domain_when_no_source_element():
+    xml = """<?xml version="1.0"?>
+    <rss><channel>
+      <item>
+        <title>Kaynaksız Haber</title>
+        <link>https://www.bing.com/haber/1</link>
+        <pubDate>Mon, 01 Jan 2024 10:00:00 GMT</pubDate>
+      </item>
+    </channel></rss>"""
+    root = ET.fromstring(xml)
+    items = _parse_standard_rss(root, "Bing Haberler", max_items=8)
+    assert items[0]["kaynak"] == "bing.com"
+
+
+def test_parse_standard_rss_falls_back_to_default_source_when_no_link():
+    xml = """<?xml version="1.0"?>
+    <rss><channel>
+      <item>
+        <title>Linksiz Haber</title>
+        <pubDate>Mon, 01 Jan 2024 10:00:00 GMT</pubDate>
+      </item>
+    </channel></rss>"""
+    root = ET.fromstring(xml)
+    items = _parse_standard_rss(root, "Varsayılan Haberler", max_items=8)
+    assert items[0]["kaynak"] == "Varsayılan Haberler"
+
+
+def test_parse_atom_entries_extracts_reddit_style_fields():
+    xml = """<?xml version="1.0"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <entry>
+        <title>Şirket hakkında bir Reddit gönderisi</title>
+        <link href="https://www.reddit.com/r/example/comments/abc123/"/>
+        <updated>2024-01-01T10:00:00+00:00</updated>
+      </entry>
+    </feed>"""
+    root = ET.fromstring(xml)
+    items = _parse_atom_entries(root, max_items=8)
+    assert len(items) == 1
+    assert items[0]["başlık"] == "Şirket hakkında bir Reddit gönderisi"
+    assert items[0]["kaynak"] == "Reddit"
+    assert items[0]["link"] == "https://www.reddit.com/r/example/comments/abc123/"
+    assert items[0]["tarih"] == "2024-01-01T10:00:00+00:00"
+    assert items[0]["tür"] == "Web / Sosyal Medya"
+
+
+def test_parse_atom_entries_respects_max_items():
+    entries = "".join(
+        f"<entry><title>Gönderi {i}</title><link href='https://reddit.com/{i}'/>"
+        f"<updated>2024-01-0{i}T00:00:00+00:00</updated></entry>"
+        for i in range(1, 5)
+    )
+    xml = f'<feed xmlns="http://www.w3.org/2005/Atom">{entries}</feed>'
+    root = ET.fromstring(xml)
+    items = _parse_atom_entries(root, max_items=2)
+    assert len(items) == 2
+
+
+def test_detect_segments_matches_financial_keywords():
+    segments = _detect_segments("Şirketin bu çeyrekteki kar ve bilanço rakamları açıklandı.")
+    assert "Finansal Performans" in segments
+
+
+def test_detect_segments_matches_multiple_segments_at_once():
+    segments = _detect_segments("Genel Müdür, yapay zeka yatırımlarıyla dijital dönüşümü anlattı.")
+    assert "Kurumsal Yönetim & Strateji" in segments
+    assert "Dijital & Teknoloji" in segments
+
+
+def test_detect_segments_returns_empty_set_when_no_keyword_matches():
+    assert _detect_segments("Bugün hava çok güzel, dışarıda yürüyüş yaptım.") == set()
+
+
+def test_segment_outlook_returns_empty_list_for_empty_dataframe():
+    assert segment_outlook(pd.DataFrame()) == []
+
+
+def test_segment_outlook_skips_segments_below_minimum_mentions():
+    df = pd.DataFrame({
+        "başlık": ["Şirketin kar rakamları açıklandı"],
+        "özet": [""],
+        "tarih": [""],
+        "duygu": ["Pozitif"],
+        "skor": [1],
+    })
+    assert segment_outlook(df) == []
+
+
+def test_segment_outlook_classifies_positive_outlook_with_reasoning():
+    df = pd.DataFrame({
+        "başlık": ["Şirket rekor kar açıkladı", "Hisse senedinde büyüme bekleniyor"],
+        "özet": ["", ""],
+        "tarih": ["", ""],
+        "duygu": ["Pozitif", "Pozitif"],
+        "skor": [2, 1],
+    })
+    outlooks = segment_outlook(df)
+    assert len(outlooks) == 1
+    assert outlooks[0]["bölüm"] == "Finansal Performans"
+    assert outlooks[0]["görünüm"] == "Olumlu"
+    assert "2 pozitif" in outlooks[0]["gerekçe"]
+
+
+def test_segment_outlook_classifies_risky_outlook_when_negative_dominates():
+    df = pd.DataFrame({
+        "başlık": ["Şirket zarar açıkladı", "Hisse senedinde kayıp yaşandı"],
+        "özet": ["", ""],
+        "tarih": ["", ""],
+        "duygu": ["Negatif", "Negatif"],
+        "skor": [-1, -2],
+    })
+    outlooks = segment_outlook(df)
+    assert outlooks[0]["görünüm"] == "Riskli"
+
+
+def test_segment_outlook_sorts_by_mention_count_descending():
+    df = pd.DataFrame({
+        "başlık": [
+            "Şirket kar açıkladı", "Hisse senedi yükseldi",
+            "Genel Müdür yeni strateji açıkladı", "Yönetim kurulu toplantısı yapıldı",
+            "CEO stratejik ortaklık imzaladı",
+        ],
+        "özet": ["", "", "", "", ""],
+        "tarih": ["", "", "", "", ""],
+        "duygu": ["Pozitif", "Pozitif", "Nötr", "Nötr", "Nötr"],
+        "skor": [1, 1, 0, 0, 0],
+    })
+    outlooks = segment_outlook(df)
+    assert outlooks[0]["bölüm"] == "Kurumsal Yönetim & Strateji"
+    assert outlooks[0]["kaynak_sayısı"] == 3

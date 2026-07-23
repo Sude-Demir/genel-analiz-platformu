@@ -60,7 +60,7 @@ Aşağıdaki 3 madde, projenin kalbini oluşturan üç büyük özelliktir.
 
 ### 🏢 C) Şirket Analizi — "Şirketin adını yaz, internetteki havayı ölç"
 
-- Bir şirket adı girersin, sistem Google Haberler ve DuckDuckGo arama sonuçlarını tarayarak o şirketle ilgili haber ve yorumları toplar.
+- Bir şirket adı girersin, sistem Google/Bing Haberler, Reddit ve DuckDuckGo arama sonuçlarını tarayarak o şirketle ilgili haber ve yorumları toplar.
 - Topladığı her metni Pozitif / Nötr / Negatif olarak etiketler (yine kelime sözlüğü yöntemiyle, yapay zekâ API'si kullanmadan).
 - Bunlardan **0-100 arası bir "itibar puanı"** hesaplar (İyi / Uyarı / Ciddi / Kritik gibi durumlarla birlikte).
 - En sık geçen konuları ve kaynaklara tıklanabilir linkleri de listeler.

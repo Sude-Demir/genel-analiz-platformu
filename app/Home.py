@@ -1,9 +1,12 @@
-"""Genel Analiz Platformu — tek sayfa, sol menüden sekme geçişli SPA kabuğu.
+"""Genel Analiz Platformu — tek sayfa SPA kabuğu.
 
-Sol kenar çubuğundaki sekmeler (Anasayfa / Dataset Analizi / CV Analizi /
-Şirket Analizi) arasında geçiş yapıldığında sağ içerik alanı session_state
-üzerinden koşullu olarak yeniden çizilir; sayfa/URL değişmez (Streamlit'in
-çoklu-sayfa gezinmesi yerine tek script + session_state deseni kullanılır).
+Ana içerik alanının sağ üstündeki dil seçici (Türkçe / İngilizce / Almanca —
+Streamlit'in yerleşik tema menüsüne yakın konumda, çünkü Streamlit o native
+menüye özel widget eklemeye izin vermiyor) ile st.session_state["lang"]
+güncellenir; translator.tr() fonksiyonu seçilen dile Google Translate
+üzerinden otomatik çeviri yapar. Dil değiştirildiğinde translator.warm_cache()
+tüm sabit metinleri paralel olarak önceden çevirip önbelleğe yazar, böylece
+sonraki panel gezintileri anında (önbellekten) render edilir.
 """
 import os
 import sys
@@ -17,27 +20,27 @@ for _p in (SRC_DIR, APP_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from i18n import t  # noqa: E402
+from translator import tr, warm_cache  # noqa: E402
 from panels import company_panel, cv_panel, dataset_panel, home_panel  # noqa: E402
 
 st.set_page_config(page_title="Genel Analiz Platformu", page_icon="🧪", layout="wide")
 
-# Dil seçimi varsayılan
+# ── Dil varsayılanı ───────────────────────────────────────────────────────────
 if "lang" not in st.session_state:
     st.session_state["lang"] = "tr"
 
 PANELS = {
-    "home": {"key": "home", "render": home_panel.render},
-    "dataset": {"key": "dataset", "render": dataset_panel.render},
-    "cv": {"key": "cv", "render": cv_panel.render},
-    "company": {"key": "company", "render": company_panel.render},
+    "home":    {"render": home_panel.render},
+    "dataset": {"render": dataset_panel.render},
+    "cv":      {"render": cv_panel.render},
+    "company": {"render": company_panel.render},
 }
 
-PANEL_LABEL_KEYS = {
-    "home": "panel_home",
-    "dataset": "panel_dataset",
-    "cv": "panel_cv",
-    "company": "panel_company",
+PANEL_LABELS_TR = {
+    "home":    "🏠 Anasayfa",
+    "dataset": "📁 Dataset Analizi",
+    "cv":      "📄 CV Analizi",
+    "company": "🌐 Şirket Analizi",
 }
 
 if "active_panel" not in st.session_state:
@@ -45,11 +48,28 @@ if "active_panel" not in st.session_state:
 
 with st.sidebar:
     with st.container(border=True):
-        st.markdown(t("uygulama_adi"))
-        st.caption(t("uygulama_alt_baslik"))
+        st.markdown(tr("## 🧪 Genel Analiz Platformu"))
+        st.caption(tr("Genel amaçlı çok modüllü analiz aracı"))
 
-    # ── Dil Seçici ──────────────────────────────────────────────────────────
     st.write("")
+    for key, info in PANELS.items():
+        is_active = st.session_state["active_panel"] == key
+        label = tr(PANEL_LABELS_TR[key])
+        if st.button(label, key=f"nav_{key}", type="primary" if is_active else "secondary", use_container_width=True):
+            st.session_state["active_panel"] = key
+            st.rerun()
+
+    st.divider()
+    st.caption(tr("Her panelin sonucu JSON / PDF / CSV olarak dışa aktarılabilir."))
+
+active_key = st.session_state["active_panel"]
+
+# ── Üst satır: sayfa başlığı (solda) + dil seçici (sağ üst) ───────────────────
+# Dil seçici burada, ana içeriğin sağ üst köşesinde duruyor — Streamlit'in
+# native "⋮" menüsündeki tema seçiciye (System/Light/Dark) en yakın konum,
+# zira o yerleşik menüye özel bir widget eklemek Streamlit API'siyle mümkün değil.
+header_left, header_right = st.columns([5, 1.4])
+with header_right:
     lang_options = {"🇹🇷 Türkçe": "tr", "🇬🇧 English": "en", "🇩🇪 Deutsch": "de"}
     lang_labels = list(lang_options.keys())
     current_lang_label = next(
@@ -57,28 +77,22 @@ with st.sidebar:
         lang_labels[0],
     )
     selected_lang_label = st.selectbox(
-        t("dil_sec"),
+        "🌐 Dil / Language / Sprache",
         options=lang_labels,
         index=lang_labels.index(current_lang_label),
         key="lang_selectbox",
+        label_visibility="collapsed",
     )
-    selected_lang_code = lang_options[selected_lang_label]
-    if selected_lang_code != st.session_state["lang"]:
-        st.session_state["lang"] = selected_lang_code
-        st.rerun()
+with header_left:
+    if active_key != "home":
+        st.title(tr(PANEL_LABELS_TR[active_key]))
 
-    st.write("")
-    for key in PANELS:
-        is_active = st.session_state["active_panel"] == key
-        label = t(PANEL_LABEL_KEYS[key])
-        if st.button(label, key=f"nav_{key}", type="primary" if is_active else "secondary", width="stretch"):
-            st.session_state["active_panel"] = key
-            st.rerun()
-    st.divider()
-    st.caption(t("sidebar_caption"))
+selected_lang_code = lang_options[selected_lang_label]
+if selected_lang_code != st.session_state["lang"]:
+    st.session_state["lang"] = selected_lang_code
+    if selected_lang_code != "tr":
+        with st.spinner(tr("Çeviriler hazırlanıyor...")):
+            warm_cache(selected_lang_code)
+    st.rerun()
 
-active_key = st.session_state["active_panel"]
-active_panel = PANELS[active_key]
-if active_key != "home":
-    st.title(t(PANEL_LABEL_KEYS[active_key]))
-active_panel["render"]()
+PANELS[active_key]["render"]()
