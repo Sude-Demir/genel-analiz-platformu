@@ -107,6 +107,23 @@ def tr(text: str) -> str:
     return text
 
 
+def trf(template: str, **kwargs) -> str:
+    """Yer tutuculu (`{ad}`) sabit bir şablonu çevirir, sonra dinamik
+    değerleri yerleştirir.
+
+    tr(f"...") kullanmanın aksine, çeviriye giden metin sabit kalır
+    (dinamik değerler {ad} yer tutucusu olarak kalır); bu sayede aynı
+    şablonun farklı değerlerle her çağrısı warm_cache() önbelleğinden
+    anında döner — tr(f"...") gibi her seferinde canlı API isteği atmaz.
+    Format belirteçleri de ({ad:.1f} gibi) şablonda kalabilir.
+    """
+    translated = tr(template)
+    try:
+        return translated.format(**kwargs)
+    except (KeyError, IndexError, ValueError):
+        return template.format(**kwargs)
+
+
 def tr_cached_count() -> dict:
     """Önbellek istatistiklerini döner (debug amaçlı)."""
     return {lang: len(entries) for lang, entries in _mem_cache.items()}
@@ -114,7 +131,7 @@ def tr_cached_count() -> dict:
 
 def _collect_static_strings() -> set[str]:
     """app/ altındaki tüm .py dosyalarını tarayıp sabit (f-string olmayan)
-    tr("...") çağrılarının içindeki metinleri toplar.
+    tr("...") ve trf("...", ...) çağrılarının şablon metinlerini toplar.
 
     ast kullanılır çünkü Python, bitişik string literalleri (örn. tr("a" "b"))
     tek bir Constant düğümüne birleştirir; bu sayede çok satıra yayılmış
@@ -136,7 +153,7 @@ def _collect_static_strings() -> set[str]:
             if (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Name)
-                and node.func.id == "tr"
+                and node.func.id in ("tr", "trf")
                 and len(node.args) == 1
                 and isinstance(node.args[0], ast.Constant)
                 and isinstance(node.args[0].value, str)

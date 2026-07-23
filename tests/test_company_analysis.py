@@ -6,6 +6,7 @@ from company_analysis import (
     _detect_segments,
     _parse_atom_entries,
     _parse_standard_rss,
+    _resolve_article_link,
     analyze_sentiment,
     reputation_score,
     segment_outlook,
@@ -114,6 +115,27 @@ def test_parse_standard_rss_falls_back_to_domain_when_no_source_element():
     assert items[0]["kaynak"] == "bing.com"
 
 
+def test_parse_standard_rss_reads_namespaced_source_element_from_bing():
+    # Bing Haberler kaynağı standart <source> değil, sorguya özel bir XML
+    # namespace URI'siyle <News:Source> olarak verir (gerçek yanıttan alınmıştır);
+    # bu URI her sorguda değişebildiğinden testte de değişken bir örnek kullanılır.
+    xml = """<?xml version="1.0"?>
+    <rss xmlns:News="https://www.bing.com/news/search?q=Turkcell&amp;format=rss">
+    <channel>
+      <item>
+        <title>Bing'den Örnek Haber</title>
+        <link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;aid=&amp;tid=abc&amp;url=https%3a%2f%2fwww.aksam.com.tr%2fhaber-1&amp;c=123&amp;mkt=tr-tr</link>
+        <pubDate>Mon, 01 Jan 2024 10:00:00 GMT</pubDate>
+        <News:Source>AKŞAM</News:Source>
+      </item>
+    </channel></rss>"""
+    root = ET.fromstring(xml)
+    items = _parse_standard_rss(root, "Bing Haberler", max_items=8)
+    assert items[0]["kaynak"] == "AKŞAM"
+    # Bing'in tıklama-izleme yönlendiricisi yerine gerçek makale linki dönmeli.
+    assert items[0]["link"] == "https://www.aksam.com.tr/haber-1"
+
+
 def test_parse_standard_rss_falls_back_to_default_source_when_no_link():
     xml = """<?xml version="1.0"?>
     <rss><channel>
@@ -125,6 +147,19 @@ def test_parse_standard_rss_falls_back_to_default_source_when_no_link():
     root = ET.fromstring(xml)
     items = _parse_standard_rss(root, "Varsayılan Haberler", max_items=8)
     assert items[0]["kaynak"] == "Varsayılan Haberler"
+
+
+def test_resolve_article_link_extracts_real_url_from_bing_redirect():
+    redirect = (
+        "http://www.bing.com/news/apiclick.aspx?ref=FexRss&aid=&tid=abc"
+        "&url=https%3a%2f%2fwww.hurriyet.com.tr%2fteknoloji%2fhaber-1&c=123&mkt=tr-tr"
+    )
+    assert _resolve_article_link(redirect) == "https://www.hurriyet.com.tr/teknoloji/haber-1"
+
+
+def test_resolve_article_link_returns_link_unchanged_when_not_bing_redirect():
+    link = "https://news.google.com/rss/articles/abc"
+    assert _resolve_article_link(link) == link
 
 
 def test_parse_atom_entries_extracts_reddit_style_fields():

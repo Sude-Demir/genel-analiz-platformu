@@ -7,7 +7,7 @@ from auto_model import infer_column_types
 from data_insights import data_quality_report, detect_outliers, generate_insights
 from data_loader import data_ready, load_employees, load_explainer, load_model
 from export_utils import build_pdf, to_json_bytes
-from translator import tr
+from translator import tr, trf
 from model import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 from panels.hr_modules import action_center, attrition, auto_model_module, performance, salary_career
 from theme import CATEGORICAL, SEQUENTIAL_BLUE, apply_layout
@@ -25,12 +25,18 @@ def load_uploaded(uploaded) -> pd.DataFrame:
 
 
 def _render_general_stats(df: pd.DataFrame, name: str):
-    st.success(tr(f"Aktif veri seti: **{name}** — {len(df)} satır, {len(df.columns)} kolon"))
+    st.success(trf(
+        "Aktif veri seti: **{name}** — {rows} satır, {cols} kolon",
+        name=name, rows=len(df), cols=len(df.columns),
+    ))
     with st.container(border=True):
         st.dataframe(df.head(20), width="stretch")
 
         numeric_cols, categorical_cols = infer_column_types(df)
-        st.write(tr(f"**{len(numeric_cols)}** sayısal, **{len(categorical_cols)}** kategorik kolon algılandı."))
+        st.write(trf(
+            "**{n_num}** sayısal, **{n_cat}** kategorik kolon algılandı.",
+            n_num=len(numeric_cols), n_cat=len(categorical_cols),
+        ))
 
         st.markdown(tr("### Genel İstatistikler"))
         describe_df = df.describe().T
@@ -57,16 +63,18 @@ def _render_general_stats(df: pd.DataFrame, name: str):
 
         kalite_notlari = []
         if quality["yinelenen_satir"] > 0:
-            kalite_notlari.append(tr(f"{quality['yinelenen_satir']} adet birebir yinelenen satır var."))
+            kalite_notlari.append(trf("{n} adet birebir yinelenen satır var.", n=quality['yinelenen_satir']))
         if quality["sabit_kolonlar"]:
-            kalite_notlari.append(tr(f"Sabit/tek değerli kolonlar: {', '.join(quality['sabit_kolonlar'])}."))
+            kalite_notlari.append(trf("Sabit/tek değerli kolonlar: {cols}.", cols=', '.join(quality['sabit_kolonlar'])))
         if quality["yuksek_kardinaliteli_kolonlar"]:
-            kalite_notlari.append(tr(f"Neredeyse her satırda farklı değer alan (ID benzeri) kolonlar: {', '.join(quality['yuksek_kardinaliteli_kolonlar'])}."))
+            kalite_notlari.append(trf(
+                "Neredeyse her satırda farklı değer alan (ID benzeri) kolonlar: {cols}.",
+                cols=', '.join(quality['yuksek_kardinaliteli_kolonlar']),
+            ))
         if quality["yuksek_eksiklikli_kolonlar"]:
-            kalite_notlari.append(tr(
-                "Yüksek oranda eksik veri içeren kolonlar: "
-                + ", ".join(f"{k} (%{round(v * 100)})" for k, v in quality["yuksek_eksiklikli_kolonlar"].items())
-                + "."
+            kalite_notlari.append(trf(
+                "Yüksek oranda eksik veri içeren kolonlar: {cols}.",
+                cols=", ".join(f"{k} (%{round(v * 100)})" for k, v in quality["yuksek_eksiklikli_kolonlar"].items()),
             ))
         if kalite_notlari:
             st.markdown(tr("**Veri Kalitesi Notları**"))
@@ -135,10 +143,10 @@ def _render_general_stats(df: pd.DataFrame, name: str):
     with c3:
         blocks = [
             {"heading": tr("Genel Bilgiler"), "type": "bullets", "content": [
-                tr(f"Satır sayısı: {len(df)}"),
-                tr(f"Kolon sayısı: {len(df.columns)}"),
-                tr(f"Sayısal kolonlar: {', '.join(numeric_cols) or '—'}"),
-                tr(f"Kategorik kolonlar: {', '.join(categorical_cols) or '—'}"),
+                trf("Satır sayısı: {n}", n=len(df)),
+                trf("Kolon sayısı: {n}", n=len(df.columns)),
+                trf("Sayısal kolonlar: {cols}", cols=', '.join(numeric_cols) or '—'),
+                trf("Kategorik kolonlar: {cols}", cols=', '.join(categorical_cols) or '—'),
             ]},
         ]
         if not missing.empty:
@@ -151,7 +159,7 @@ def _render_general_stats(df: pd.DataFrame, name: str):
             blocks.append({"heading": tr("Aykırı Değerler (IQR)"), "type": "table", "content": (
                 list(outliers_df.columns), [tuple(row) for row in outliers_df.itertuples(index=False)],
             )})
-        pdf_bytes = build_pdf(tr(f"Veri Seti Analiz Raporu — {name}"), blocks)
+        pdf_bytes = build_pdf(trf("Veri Seti Analiz Raporu — {name}", name=name), blocks)
         st.download_button(
             tr("PDF indir"), data=pdf_bytes,
             file_name=f"{name}_rapor.pdf", mime="application/pdf", key="ds_pdf",
@@ -173,7 +181,7 @@ def render():
                 st.session_state["ds_name"] = uploaded.name
                 st.session_state["ds_is_builtin"] = False
             except Exception as exc:
-                st.error(tr(f"Dosya okunamadı. ({exc})"))
+                st.error(trf("Dosya okunamadı. ({hata})", hata=exc))
     else:
         if not data_ready():
             st.warning(tr("Dahili İK veri seti bulunamadı. Önce `python src/data_prep.py` çalıştırın."))

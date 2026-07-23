@@ -4,7 +4,7 @@ import plotly.express as px
 import streamlit as st
 
 from export_utils import build_pdf, to_json_bytes
-from translator import tr
+from translator import tr, trf
 from theme import CATEGORICAL, SEQUENTIAL_BLUE, apply_layout
 
 
@@ -98,9 +98,9 @@ def render(emp: pd.DataFrame):
     with c3:
         pdf_bytes = build_pdf(tr("Maaş ve Kariyer Analizi Raporu"), [
             {"heading": tr("Özet"), "type": "bullets", "content": [
-                tr(f"Ortalama aylık gelir: {emp['AylikGelir'].mean():,.0f} $"),
-                tr(f"Ortalama maaş artış oranı: %{emp['MaasArtisYuzdesi'].mean():.1f}"),
-                tr(f"Son terfiden beri ortalama yıl: {emp['SonTerfidenBeriGecenYil'].mean():.1f}"),
+                trf("Ortalama aylık gelir: {val:,.0f} $", val=emp['AylikGelir'].mean()),
+                trf("Ortalama maaş artış oranı: %{val:.1f}", val=emp['MaasArtisYuzdesi'].mean()),
+                trf("Son terfiden beri ortalama yıl: {val:.1f}", val=emp['SonTerfidenBeriGecenYil'].mean()),
             ]},
             {"heading": tr("Kademeye Göre Ortalama Hisse Opsiyonu"), "type": "table", "content": (
                 [tr("Kademe"), ort_hisse_col], level_stock.round(2).values.tolist(),

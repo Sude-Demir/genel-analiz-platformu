@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from export_utils import build_pdf, to_json_bytes
-from translator import tr
+from translator import tr, trf
 from model import CATEGORICAL_FEATURES, NUMERIC_FEATURES, explain_instance, get_feature_importances
 from theme import CATEGORICAL, STATUS, apply_layout, risk_status
 
@@ -109,7 +109,9 @@ def render_risk_calculator(emp: pd.DataFrame, pipeline, explainer, key_prefix: s
     with c2:
         pdf_bytes = build_pdf(tr("Çalışan Kaybı Risk Skoru Raporu"), [
             {"heading": tr("Girdi"), "type": "table", "content": ([tr("Alan"), tr("Değer")], list(overrides.items()))},
-            {"heading": tr("Sonuç"), "type": "paragraph", "content": tr(f"Risk Skoru: %{prob*100:.1f} — Durum: {status_labels[status]}")},
+            {"heading": tr("Sonuç"), "type": "paragraph", "content": trf(
+                "Risk Skoru: %{skor:.1f} — Durum: {durum}", skor=prob * 100, durum=status_labels[status],
+            )},
         ])
         st.download_button(
             tr("PDF indir"), data=pdf_bytes,

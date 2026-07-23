@@ -17,7 +17,7 @@ from auto_model import (
     train_auto_model,
 )
 from export_utils import build_pdf, to_json_bytes
-from translator import tr
+from translator import tr, trf
 from theme import CATEGORICAL, apply_layout
 
 
@@ -64,7 +64,7 @@ def render_manual_prediction(df: pd.DataFrame, result: dict, state_prefix: str):
                     pred_label = pred_code
                 st.metric(f"{tr('Tahmin Edilen')} {result['target_col']}", str(pred_label))
                 if result.get("n_classes") == 2:
-                    st.caption(tr(f"Pozitif sınıf olasılığı: %{proba[1] * 100:.1f}"))
+                    st.caption(trf("Pozitif sınıf olasılığı: %{val:.1f}", val=proba[1] * 100))
                 else:
                     sinif_col, olasilik_col = tr("Sınıf"), tr("Olasılık")
                     proba_df = pd.DataFrame({
@@ -96,7 +96,7 @@ def render(df: pd.DataFrame, state_prefix: str):
     target_col = st.selectbox(tr("Hedef Kolon (tahmin edilecek)"), df.columns, index=len(df.columns) - 1, key=f"{state_prefix}_target")
     task_type = detect_task_type(df[target_col])
     task_label = tr("Sınıflandırma") if task_type == "classification" else tr("Regresyon")
-    st.caption(tr(f"Otomatik algılanan görev türü: **{task_label}**"))
+    st.caption(trf("Otomatik algılanan görev türü: **{label}**", label=task_label))
 
     result_key = f"{state_prefix}_auto_model_result"
 

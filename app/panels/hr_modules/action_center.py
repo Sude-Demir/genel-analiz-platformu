@@ -5,7 +5,7 @@ import streamlit as st
 
 from actions import suggest_actions
 from export_utils import build_pdf, to_json_bytes
-from translator import tr
+from translator import tr, trf
 from model import CATEGORICAL_FEATURES, NUMERIC_FEATURES, apply_scenario, explain_batch, explain_instance
 from theme import STATUS, apply_layout
 
@@ -22,7 +22,7 @@ def render(emp: pd.DataFrame, pipeline, explainer):
         st.subheader(tr("Risk Eşiğini Aşan Çalışanlar"))
         threshold = st.slider(tr("Risk Eşiği (%)"), 0, 100, 50, step=5, key="ac_threshold") / 100
         at_risk = emp[emp["RiskSkoru"] >= threshold].sort_values("RiskSkoru", ascending=False)
-        st.caption(tr(f"{len(at_risk)} çalışan bu eşiğin üzerinde risk skoruna sahip."))
+        st.caption(trf("{n} çalışan bu eşiğin üzerinde risk skoruna sahip.", n=len(at_risk)))
 
         rows_df = None
         if at_risk.empty:
@@ -34,7 +34,7 @@ def render(emp: pd.DataFrame, pipeline, explainer):
         else:
             display_n = min(len(at_risk), 30)
             subset = at_risk.head(display_n)
-            with st.spinner(tr(f"{display_n} çalışan için aksiyon önerileri hesaplanıyor...")):
+            with st.spinner(trf("{n} çalışan için aksiyon önerileri hesaplanıyor...", n=display_n)):
                 contrib_df = explain_batch(pipeline, explainer, subset[CATEGORICAL_FEATURES + NUMERIC_FEATURES])
 
             rows = []
@@ -51,7 +51,7 @@ def render(emp: pd.DataFrame, pipeline, explainer):
             with st.container(border=True):
                 st.dataframe(rows_df.style.format({"RiskSkoru": "{:.1%}"}), width="stretch", hide_index=True)
                 if len(at_risk) > display_n:
-                    st.caption(tr(f"Performans nedeniyle en riskli {display_n} çalışan gösteriliyor (toplam {len(at_risk)})."))
+                    st.caption(trf("Performans nedeniyle en riskli {n} çalışan gösteriliyor (toplam {total}).", n=display_n, total=len(at_risk)))
 
         if rows_df is not None:
             st.markdown(tr("### Dışa Aktar"))

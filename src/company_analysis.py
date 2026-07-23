@@ -15,7 +15,7 @@ uç) için eklenmedi.
 import re
 import xml.etree.ElementTree as ET
 from collections import Counter
-from urllib.parse import quote_plus
+from urllib.parse import parse_qs, quote_plus, urlparse
 
 import pandas as pd
 import requests
@@ -56,18 +56,45 @@ STOPWORDS = {
 }
 
 
+def _find_source_text(item: ET.Element) -> str | None:
+    """<source> elemanını isim alanından (namespace) bağımsız bulur.
+
+    Google Haberler standart RSS 2.0 `<source>` (namespace'siz) kullanır.
+    Bing Haberler ise kaynağı `<News:Source>` şeklinde, sorguya özel bir XML
+    namespace URI'siyle verir (örn. ".../news/search?q=Turkcell&format=rss");
+    bu URI her sorguda değiştiğinden sabit kodlanamaz. item.find("source")
+    bu yüzden Bing'de hiç eşleşmez ve kaynak adı kaybolup linkin domaini
+    ("bing.com") kullanılırdı — bunun yerine her alt elemanın namespace'siz
+    (yerel) adını karşılaştırıyoruz.
+    """
+    for child in item:
+        local_tag = child.tag.rsplit("}", 1)[-1]
+        if local_tag.lower() == "source" and child.text:
+            return child.text
+    return None
+
+
+def _resolve_article_link(link: str) -> str:
+    """Bing'in tıklama-izleme yönlendirici linkinden (apiclick.aspx?...&url=...)
+    gerçek makale URL'sini çıkarır; başka bir formatsa linki olduğu gibi döner.
+    """
+    if "bing.com/news/apiclick.aspx" not in link:
+        return link
+    query = urlparse(link).query
+    params = parse_qs(query)
+    real_url = params.get("url", [None])[0]
+    return real_url if real_url else link
+
+
 def _parse_standard_rss(root: ET.Element, default_source: str, max_items: int) -> list[dict]:
     """RSS 2.0 `<item>` tabanlı beslemeleri (Google/Bing Haberler) ortak biçimde ayrıştırır."""
     items = []
     for item in root.findall(".//item")[:max_items]:
         title = (item.findtext("title") or "").strip()
-        link = (item.findtext("link") or "").strip()
+        link = _resolve_article_link((item.findtext("link") or "").strip())
         pub_date = (item.findtext("pubDate") or "").strip()
-        source_el = item.find("source")
-        if source_el is not None and source_el.text:
-            source = source_el.text
-        else:
-            source = _domain(link) if link else default_source
+        source_text = _find_source_text(item)
+        source = source_text if source_text else (_domain(link) if link else default_source)
         if title:
             items.append({
                 "başlık": title, "kaynak": source, "link": link,

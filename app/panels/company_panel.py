@@ -6,7 +6,7 @@ import streamlit as st
 
 from company_analysis import build_dataframe, extract_topics, reputation_score, segment_outlook, sentiment_timeline
 from export_utils import build_pdf, to_json_bytes
-from translator import tr
+from translator import tr, trf
 from theme import CATEGORICAL, MUTED, STATUS, apply_layout
 
 CACHE_TTL_SECONDS = 1800
@@ -43,7 +43,7 @@ def render():
 
     if (analyze_clicked and company.strip()) or ornek_clicked:
         target = company.strip() or ORNEK_SIRKET
-        with st.spinner(tr(f"'{target}' için web ve haber kaynakları taranıyor...")):
+        with st.spinner(trf("'{target}' için web ve haber kaynakları taranıyor...", target=target)):
             df, topics, warnings, outlooks = _cached_scan(target)
         st.session_state["company_name"] = target
         st.session_state["company_df"] = df
@@ -62,10 +62,10 @@ def render():
     outlooks = st.session_state["company_outlooks"]
 
     if df.empty:
-        st.warning(tr(f"'{company_name}' için hiçbir kaynak bulunamadı. Şirket adını farklı yazarak tekrar deneyin."))
+        st.warning(trf("'{company_name}' için hiçbir kaynak bulunamadı. Şirket adını farklı yazarak tekrar deneyin.", company_name=company_name))
         return
 
-    st.success(tr(f"'{company_name}' için {len(df)} kaynak bulundu."))
+    st.success(trf("'{company_name}' için {n} kaynak bulundu.", company_name=company_name, n=len(df)))
 
     score, status = reputation_score(df)
 
@@ -139,7 +139,7 @@ def render():
                     f"<span style='color:{STATUS[status_key]}; font-weight:600;'>{tr(o['görünüm'])}</span>",
                     unsafe_allow_html=True,
                 )
-                st.caption(tr(f"{o['kaynak_sayısı']} kaynaktan üretildi."))
+                st.caption(trf("{n} kaynaktan üretildi.", n=o['kaynak_sayısı']))
                 st.write(tr(o["gerekçe"]))
 
     st.markdown(tr("### Kaynaklar"))
@@ -179,11 +179,11 @@ def render():
     with c3:
         blocks = [
             {"heading": tr("Genel Özet"), "type": "bullets", "content": [
-                tr(f"Toplam taranan kaynak: {len(df)}"),
-                tr(f"İtibar Puanı: {score}/100"),
-                tr(f"Pozitif: {int(counts.get('Pozitif', 0))}"),
-                tr(f"Nötr: {int(counts.get('Nötr', 0))}"),
-                tr(f"Negatif: {int(counts.get('Negatif', 0))}"),
+                trf("Toplam taranan kaynak: {n}", n=len(df)),
+                trf("İtibar Puanı: {score}/100", score=score),
+                trf("Pozitif: {n}", n=int(counts.get('Pozitif', 0))),
+                trf("Nötr: {n}", n=int(counts.get('Nötr', 0))),
+                trf("Negatif: {n}", n=int(counts.get('Negatif', 0))),
             ]},
             {"heading": tr("Öne Çıkan Konular"), "type": "bullets",
              "content": [f"{w} ({c})" for w, c in topics] or ["—"]},
@@ -198,7 +198,7 @@ def render():
         ]
         if warnings:
             blocks.append({"heading": tr("Tarama Uyarıları"), "type": "bullets", "content": warnings})
-        pdf_bytes = build_pdf(tr(f"Şirket Analiz Raporu — {company_name}"), blocks)
+        pdf_bytes = build_pdf(trf("Şirket Analiz Raporu — {company_name}", company_name=company_name), blocks)
         st.download_button(
             tr("PDF indir"), data=pdf_bytes,
             file_name=f"{company_name}_analiz.pdf", mime="application/pdf", key="company_pdf",

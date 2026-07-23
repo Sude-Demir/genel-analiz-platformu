@@ -19,7 +19,7 @@ Bugün pek çok "akıllı" uygulama, işi ChatGPT gibi ücretli bir yapay zekâ 
 - "Akıllı" görünen neredeyse her şey (CV değerlendirme, şirket yorumlarının olumlu/olumsuz olduğunu anlama) aslında **kural ve kelime listeleriyle** yapılıyor. Yani sistem, önceden hazırlanmış "bu kelimeler iyi anlama gelir, bu kelimeler kötü anlama gelir" gibi sözlüklere bakarak karar veriyor.
 - Projede **gerçek anlamda öğrenen** tek bir yapay zekâ modeli var: bir çalışanın işten ayrılma ihtimalini tahmin eden model. Bu model geçmiş verilerden gerçekten "öğreniyor".
 
-Bunun faydası: internet bağlantısı olmasa da (şirket analizi hariç), aylık ücret ödemeden, verilerini dışarıya göndermeden çalışabiliyor.
+Bunun faydası: internet bağlantısı olmasa da (şirket analizi ve Türkçe dışındaki bir arayüz dili seçilmesi hariç), aylık ücret ödemeden, verilerini dışarıya göndermeden çalışabiliyor.
 
 ---
 
@@ -28,10 +28,11 @@ Bunun faydası: internet bağlantısı olmasa da (şirket analizi hariç), aylı
 Uygulamayı açtığında **tek bir ekran** görürsün — sekmeler arasında sayfa yenilenmeden geçiş yapılır (buna teknik olarak **SPA — tek sayfa uygulama** deniyor). Solda bir menü, menüde şu bölümler var:
 
 - 🏠 **Anasayfa** — karşılama ve tanıtım ekranı
-- 🔮 **Tahmin** — çalışan ayrılma tahminine hızlı erişim
-- 📊 **Dataset Analizi** — herhangi bir veri tablosunu incelemek için
+- 📊 **Dataset Analizi** — herhangi bir veri tablosunu incelemek için (çalışan ayrılma tahmini de bu sekmenin altındaki bir alt modül)
 - 📄 **CV Analizi** — özgeçmiş değerlendirmek için
 - 🏢 **Şirket Analizi** — bir şirketin internetteki imajını ölçmek için
+
+Ayrıca menüden **Türkçe / İngilizce / Almanca** arasında anlık dil değişimi yapılabilir (bkz. Madde 7).
 
 Aşağıdaki 3 madde, projenin kalbini oluşturan üç büyük özelliktir.
 
@@ -44,6 +45,7 @@ Aşağıdaki 3 madde, projenin kalbini oluşturan üç büyük özelliktir.
 - CSV, Excel ya da JSON dosyanı yükleyebilirsin, ya da projenin içinde hazır gelen örnek bir İK (İnsan Kaynakları) veri setini kullanabilirsin.
 - Uygulama otomatik olarak: verinin ilk birkaç satırını gösterir, kaç sayısal / kaç kategorik (kategori bazlı, örn. "Departman: Satış/Üretim") kolon olduğunu söyler, özet istatistikler (ortalama, en düşük/en yüksek değer vb.) ve eksik veri tablosu çıkarır.
 - Otomatik grafikler üretir: sayısal kolonların dağılımı, kategorilerin çubuk grafiği, kolonlar arasındaki ilişki (korelasyon) haritası.
+- **Otomatik veri kalitesi & içgörü raporu**: yinelenen satırları, sabit/tek değerli kolonları, ID benzeri (neredeyse her satırda farklı) kolonları, aykırı değerleri ve eksik veri oranı yüksek kolonları kendiliğinden tespit edip düz Türkçe cümlelerle özetler — kullanıcının tabloyu tek tek incelemesine gerek kalmaz.
 - Sonuçları CSV, JSON veya PDF olarak indirebilirsin.
 - Eğer yüklediğin veri, projenin bildiği İK şemasına (kolon isimlerine) uyuyorsa, aşağıda anlatılan **özel İK modülleri** de otomatik olarak açılır (bkz. Madde 5).
 
@@ -103,8 +105,9 @@ Eğitilmiş tahmin modeli
 
 ## 7) Kalite ve güven için yapılanlar
 
-- **Otomatik testler**: Projenin her önemli parçası (veri temizleme, model, CV analizi, şirket analizi, hatta CV ekranının kendisi) için otomatik testler yazılmış. Yani bir değişiklik yapıldığında, "hâlâ doğru çalışıyor mu?" sorusu makine tarafından otomatik kontrol ediliyor.
+- **Otomatik testler**: Projenin her önemli parçası (veri temizleme, model, CV analizi, şirket analizi, çeviri altyapısı, hatta CV ekranının kendisi) için otomatik testler yazılmış. Yani bir değişiklik yapıldığında, "hâlâ doğru çalışıyor mu?" sorusu makine tarafından otomatik kontrol ediliyor.
 - **CI (Sürekli Entegrasyon)**: GitHub'a her kod gönderildiğinde bu testler otomatik olarak çalıştırılıyor — insan unutsa bile testler unutmuyor.
+- **Çok dilli arayüz (TR/EN/DE)**: Uygulama menüden Türkçe, İngilizce veya Almanca'ya anında geçebiliyor. Çeviriler Google Translate üzerinden yapılıp diske kaydediliyor (önbelleğe alınıyor); böylece aynı metin ikinci kez görüntülendiğinde tekrar internete çıkılmıyor, anında görünüyor. Bu, yalnızca dil Türkçe değilken devreye giren, internet gerektiren tek özelliktir.
 - **Açık/Koyu tema desteği**: Kullanıcı isterse uygulamayı açık, isterse koyu temada kullanabiliyor.
 - **Türkçe karakter desteği**: PDF raporlarında "ş, ğ, ı, ö, ü, ç" harfleri düzgün basılıyor (özel bir font gömülü).
 - **Renk körlüğüne uygun grafikler**: Grafiklerdeki renkler, renk körü kullanıcılar da ayırt edebilsin diye seçilmiş.
@@ -124,8 +127,10 @@ Proje, 21 Temmuz 2026 tarihinde, tek geliştirici tarafından adım adım şu ş
 7. **Görsel yenilenme** — Grafiklerdeki okunmayan yazı ve üst üste binen etiket sorunları düzeltildi, ardından **açık/koyu tema ve kart bazlı** kapsamlı bir görsel yenileme yapıldı.
 8. **Mimari yenilenme (SPA'ya geçiş)** — Uygulama, bugünkü "tek ekran, sol menüden geçiş" yapısına kavuştu; ayrı bir "Tahmin" kısayol ekranı eklendi.
 9. **En güncel eklemeler** — CV Analizi'ne **ATS uyumluluğu** ve **tutarsızlık kontrolü**, Şirket Analizi'ne **itibar puanı**, anasayfaya yeni bir tasarım ve genel temaya haki renk getirildi.
+10. **Veri içgörüleri ve sadeleşme** (22 Temmuz 2026) — Yüklenen her veri setinde eksik değer, aykırı değer ve veri kalitesi sorunlarını otomatik tespit eden yeni bir modül eklendi; kullanımı azalan ayrı "Tahmin" kısayol ekranı kaldırıldı (işlevi Dataset Analizi altındaki ilgili modüle taşındı).
+11. **Çok dilli arayüz** (22-23 Temmuz 2026) — Uygulamaya Türkçe/İngilizce/Almanca dil desteği eklendi. Önce sabit bir çeviri sözlüğüyle başlandı, ardından bunun yerine Google Translate tabanlı, sonuçları önbelleğe alan daha esnek bir çeviri sistemine (`translator.py`) geçildi; bu sırada Şirket Analizi'nin haber kaynakları genişletildi (Bing Haberler, Reddit eklendi) ve Bing'den gelen kaynak isimlerinin/linklerinin doğru ayrıştırılmadığı bir hata giderildi.
 
-Genel yön özetle: *önce sağlam bir temel → sonra modeli güçlendirme → sonra CV tarafını akıllandırma → sonra görselleri güzelleştirme → sonra mimariyi sadeleştirme → en son ileri düzey analiz özellikleri.*
+Genel yön özetle: *önce sağlam bir temel → sonra modeli güçlendirme → sonra CV tarafını akıllandırma → sonra görselleri güzelleştirme → sonra mimariyi sadeleştirme → sonra ileri düzey analiz özellikleri → en son çok dilli erişilebilirlik.*
 
 ---
 
@@ -166,6 +171,7 @@ python -m pytest tests/ -v
 | **openpyxl** | Excel dosyalarını okuma |
 | **fpdf2** | Türkçe karakter destekli PDF rapor üretimi |
 | **requests, BeautifulSoup4** | Şirket analizinde internetten haber/yorum toplama |
+| **deep-translator** | Arayüzü Türkçe dışındaki dillere (EN/DE) çevirir (Google Translate üzerinden) |
 | **pytest** | Otomatik testlerin çalıştırılması |
 
 ---

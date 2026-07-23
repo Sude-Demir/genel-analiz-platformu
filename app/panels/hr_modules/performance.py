@@ -4,7 +4,7 @@ import plotly.express as px
 import streamlit as st
 
 from export_utils import build_pdf, to_json_bytes
-from translator import tr
+from translator import tr, trf
 from theme import CATEGORICAL, SEQUENTIAL_BLUE, apply_layout
 
 
@@ -102,10 +102,10 @@ def render(emp: pd.DataFrame):
     with c3:
         pdf_bytes = build_pdf(tr("Performans Analizi Raporu"), [
             {"heading": tr("Özet"), "type": "bullets", "content": [
-                tr(f"Departman filtresi: {secilen_departman}"),
-                tr(f"Ortalama performans puanı: {df['PerformansPuani'].mean():.2f} / 4"),
-                tr(f"Yüksek performanslı oranı: %{(df['PerformansPuani'] >= 4).mean() * 100:.1f}"),
-                tr(f"Ortalama yıllık eğitim sayısı: {df['GecenYilEgitimSayisi'].mean():.1f}"),
+                trf("Departman filtresi: {departman}", departman=secilen_departman),
+                trf("Ortalama performans puanı: {val:.2f} / 4", val=df['PerformansPuani'].mean()),
+                trf("Yüksek performanslı oranı: %{val:.1f}", val=(df['PerformansPuani'] >= 4).mean() * 100),
+                trf("Ortalama yıllık eğitim sayısı: {val:.1f}", val=df['GecenYilEgitimSayisi'].mean()),
             ]},
             {"heading": tr("Pozisyona Göre En İyi 10"), "type": "table", "content": (
                 ["Pozisyon", ort_perf_col, calisan_col],

@@ -73,6 +73,7 @@ Kolon adı eşlemesini (`COLUMN_MAP`) veya değer eşlemesini (`VALUE_MAP`) değ
 - `app/export_utils.py` — tüm panellerde JSON (`to_json_bytes`) ve PDF (`build_pdf` + blok listesi deseni: `{"heading", "type": "paragraph"|"bullets"|"table", "content"}`) dışa aktarım için tek ortak yol. PDF üretimi `fpdf2` + gömülü `DejaVuSans.ttf` (Türkçe karakter desteği için) kullanır; harici bir servise bağımlı değildir.
 - `app/actions.py` — SHAP pozitif katkılarını Türkçe aksiyon önerilerine çevirir (`ACTIONABLE_SUGGESTIONS`). Yaş, cinsiyet, medeni durum, departman gibi değiştirilemez/demografik özellikler **kasıtlı olarak** dışarıda tutulur — yeni öneri eklerken bu prensibi koru.
 - `app/data_loader.py` — `st.cache_data`/`st.cache_resource` ile veri/model/explainer yükleme; pahalı SHAP explainer kurulumu burada cache'lenir.
+- `app/translator.py` — TR/EN/DE arayüz çevirisi (`tr()`/`trf()`, deep-translator/Google Translate tabanlı, disk önbellekli). Sabit metinler için `tr("...")` kullan; **çalışma zamanı verisi içeren metinlerde `tr(f"...")` kullanma** — bu, `warm_cache()`'in önceden çeviremeyeceği, her render'da canlı API isteğine yol açan bir performans hatasıdır. Bunun yerine `trf("Sabit şablon {ad}", ad=deger)` kullan (yer tutucular çeviriden sonra `.format()` ile doldurulur, aynı şablon önbellekten anında döner).
 
 ### Harici bağımlılık yok, önemli kısıtlar
 

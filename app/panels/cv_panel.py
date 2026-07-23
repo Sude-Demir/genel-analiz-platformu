@@ -19,7 +19,7 @@ from cv_analysis import (
     skill_development_tips,
 )
 from export_utils import build_pdf, to_json_bytes
-from translator import tr
+from translator import tr, trf
 from theme import CATEGORICAL, STATUS, apply_layout, risk_status
 
 ORNEK_CV_METNI = (
@@ -96,13 +96,13 @@ def _render_single_cv():
     result = analyze_cv(st.session_state["cv_text"])
     file_name = st.session_state["cv_name"]
     if result.get("name"):
-        st.success(tr(f"Analiz edilen aday: **{result['name']}** ({file_name})"))
+        st.success(trf("Analiz edilen aday: **{name}** ({file_name})", name=result['name'], file_name=file_name))
     else:
-        st.success(tr(f"Analiz edilen dosya: **{file_name}**"))
+        st.success(trf("Analiz edilen dosya: **{file_name}**", file_name=file_name))
 
     with st.container(border=True):
         c1, c2, c3 = st.columns(3)
-        c1.metric(tr("Tahmini Deneyim"), tr(f"{result['experience_years']} yıl") if result["experience_years"] else "—")
+        c1.metric(tr("Tahmini Deneyim"), trf("{years} yıl", years=result['experience_years']) if result["experience_years"] else "—")
         c2.metric(tr("Eğitim Düzeyi"), result["education"] or "—")
         c3.metric(tr("Tespit Edilen Beceri Sayısı"), len(result["all_skills"]))
 
@@ -181,13 +181,13 @@ def _render_single_cv():
 
                 if match["required_experience"] is not None:
                     if match["candidate_experience"] is not None:
-                        durum = "✅ Karşılıyor" if match["experience_met"] else "⚠️ Karşılamıyor"
-                        st.caption(tr(
-                            f"Deneyim: ilan {match['required_experience']} yıl istiyor, "
-                            f"aday ~{match['candidate_experience']} yıl — {durum}"
+                        durum = tr("✅ Karşılıyor") if match["experience_met"] else tr("⚠️ Karşılamıyor")
+                        st.caption(trf(
+                            "Deneyim: ilan {required} yıl istiyor, aday ~{candidate} yıl — {durum}",
+                            required=match['required_experience'], candidate=match['candidate_experience'], durum=durum,
                         ))
                     else:
-                        st.caption(tr(f"Deneyim: ilan {match['required_experience']} yıl istiyor, adayın deneyimi CV'de net değil."))
+                        st.caption(trf("Deneyim: ilan {required} yıl istiyor, adayın deneyimi CV'de net değil.", required=match['required_experience']))
 
                 if match["group_breakdown"]:
                     breakdown_df = pd.DataFrame(match["group_breakdown"])
@@ -284,10 +284,10 @@ def _render_compare_cvs():
             try:
                 text = extract_text(f)
             except Exception:
-                st.warning(tr(f"**{f.name}** okunamadı: dosya bozuk olabilir veya beklenmeyen bir formatta."))
+                st.warning(trf("**{name}** okunamadı: dosya bozuk olabilir veya beklenmeyen bir formatta.", name=f.name))
                 continue
             if not text.strip():
-                st.warning(tr(f"**{f.name}** dosyasından metin çıkarılamadı (taranmış görsel PDF olabilir)."))
+                st.warning(trf("**{name}** dosyasından metin çıkarılamadı (taranmış görsel PDF olabilir).", name=f.name))
                 continue
 
             result = analyze_cv(text)
@@ -303,6 +303,7 @@ def _render_compare_cvs():
         st.warning(tr("İlan metninde tanınan beceri anahtar kelimesi bulunamadı; genel skora göre sıralanıyor."))
 
     sort_key_label = "Uygunluk %" if has_job else "Genel Skor"
+    sort_key_display = tr(sort_key_label)
     rows = []
     for c in candidates:
         r = c["result"]
@@ -338,17 +339,19 @@ def _render_compare_cvs():
     explanation_lines = []
     if no_suitable_candidate:
         st.warning(tr("Uygun aday bulunamadı."))
-        explanation_lines.append(tr(
-            f"Hiçbir adayın {sort_key_label} puanı %0'ın üzerinde değil; bu nedenle bir aday önerilmiyor."
+        explanation_lines.append(trf(
+            "Hiçbir adayın {label} puanı %0'ın üzerinde değil; bu nedenle bir aday önerilmiyor.",
+            label=sort_key_display,
         ))
     elif all_tied:
-        st.info(tr(
-            f"⚖️ Eşit Uygunluk: Tüm adaylar aynı {sort_key_label} puanına sahip "
-            f"(**{top_score}**) — {', '.join(tied_files)}."
+        st.info(trf(
+            "⚖️ Eşit Uygunluk: Tüm adaylar aynı {label} puanına sahip (**{score}**) — {files}.",
+            label=sort_key_display, score=top_score, files=', '.join(tied_files),
         ))
-        explanation_lines.append(tr(
-            f"Tüm adaylar ({', '.join(tied_files)}) aynı {sort_key_label} puanına ({top_score}) sahip "
-            "olduğu için aralarında bir öncelik sıralaması yapılmadı."
+        explanation_lines.append(trf(
+            "Tüm adaylar ({files}) aynı {label} puanına ({score}) sahip "
+            "olduğu için aralarında bir öncelik sıralaması yapılmadı.",
+            files=', '.join(tied_files), label=sort_key_display, score=top_score,
         ))
     else:
         top_candidate = next(c for c in candidates if c["dosya"] == top["Dosya"])
@@ -357,31 +360,47 @@ def _render_compare_cvs():
         top_likelihood = hire_likelihood(top_r, top_m)
 
         if has_job:
-            explanation_lines.append(tr(
-                f"**{top['Dosya']}**, girilen ilana göre adaylar arasındaki en yüksek beceri "
-                f"örtüşme yüzdesine (**%{top_m['match_pct']}**, {len(top_m['matched_skills'])} eşleşen / "
-                f"{len(top_m['missing_skills'])} eksik beceri) sahip olduğu için 1. sırada seçildi."
+            explanation_lines.append(trf(
+                "**{dosya}**, girilen ilana göre adaylar arasındaki en yüksek beceri "
+                "örtüşme yüzdesine (**%{pct}**, {matched} eşleşen / "
+                "{missing} eksik beceri) sahip olduğu için 1. sırada seçildi.",
+                dosya=top['Dosya'], pct=top_m['match_pct'],
+                matched=len(top_m['matched_skills']), missing=len(top_m['missing_skills']),
             ))
             if top_m.get("experience_met") is True:
-                explanation_lines.append(tr(f"Deneyim şartını karşılıyor (ilan {top_m['required_experience']} yıl istiyor, adayın ~{top_m['candidate_experience']} yıl deneyimi var)."))
+                explanation_lines.append(trf(
+                    "Deneyim şartını karşılıyor (ilan {required} yıl istiyor, adayın ~{candidate} yıl deneyimi var).",
+                    required=top_m['required_experience'], candidate=top_m['candidate_experience'],
+                ))
             elif top_m.get("experience_met") is False:
-                explanation_lines.append(tr(f"Deneyim şartını tam karşılamıyor (ilan {top_m['required_experience']} yıl istiyor, adayın ~{top_m['candidate_experience']} yıl deneyimi var) ama beceri örtüşmesi öne çıkardı."))
+                explanation_lines.append(trf(
+                    "Deneyim şartını tam karşılamıyor (ilan {required} yıl istiyor, adayın ~{candidate} yıl deneyimi var) ama beceri örtüşmesi öne çıkardı.",
+                    required=top_m['required_experience'], candidate=top_m['candidate_experience'],
+                ))
         else:
-            deneyim_str = f"{top_r['experience_years']} yıl deneyim" if top_r["experience_years"] else "belirsiz deneyim"
-            explanation_lines.append(tr(
-                f"İlan metni girilmediği için adaylar **genel güç skoruna** göre sıralandı; bu skor "
-                f"beceri sayısı + (üst sınırlı) deneyim yılı + eğitim düzeyi ağırlığından oluşuyor. "
-                f"**{top['Dosya']}** en yüksek skora (**{general_score(top_r)}**) sahip: "
-                f"{len(top_r['all_skills'])} beceri, {deneyim_str}, "
-                f"{top_r['education'] or 'belirsiz eğitim düzeyi'}."
+            deneyim_str = trf("{years} yıl deneyim", years=top_r['experience_years']) if top_r["experience_years"] else tr("belirsiz deneyim")
+            egitim_str = top_r['education'] or tr('belirsiz eğitim düzeyi')
+            explanation_lines.append(trf(
+                "İlan metni girilmediği için adaylar **genel güç skoruna** göre sıralandı; bu skor "
+                "beceri sayısı + (üst sınırlı) deneyim yılı + eğitim düzeyi ağırlığından oluşuyor. "
+                "**{dosya}** en yüksek skora (**{score}**) sahip: "
+                "{skill_count} beceri, {deneyim}, {egitim}.",
+                dosya=top['Dosya'], score=general_score(top_r),
+                skill_count=len(top_r['all_skills']), deneyim=deneyim_str, egitim=egitim_str,
             ))
-        explanation_lines.append(tr(f"Tahmini işe uygunluk olasılığı: **%{top_likelihood}**."))
+        explanation_lines.append(trf("Tahmini işe uygunluk olasılığı: **%{val}**.", val=top_likelihood))
         if top_r["position_suggestions"]:
             best_pos = top_r["position_suggestions"][0]
-            explanation_lines.append(tr(f"En çok öne çıkan tahmini pozisyon: **{best_pos['Pozisyon']}** (uygunluk skoru: {best_pos['Uygunluk Skoru']})."))
+            explanation_lines.append(trf(
+                "En çok öne çıkan tahmini pozisyon: **{pozisyon}** (uygunluk skoru: {skor}).",
+                pozisyon=best_pos['Pozisyon'], skor=best_pos['Uygunluk Skoru'],
+            ))
 
         top_label = f"{top['Aday']} ({top['Dosya']})" if top["Aday"] != "—" else top["Dosya"]
-        st.success(tr(f"🏆 En uygun aday: **{top_label}** — {sort_key_label}: {top[sort_key_label]}"))
+        st.success(trf(
+            "🏆 En uygun aday: **{top_label}** — {label}: {score}",
+            top_label=top_label, label=sort_key_display, score=top[sort_key_label],
+        ))
 
     with st.container(border=True):
         format_map = {"Uygunluk %": "{:.0f}", "Tahmini İşe Uygunluk Olasılığı (%)": "{:.0f}"}
@@ -403,7 +422,7 @@ def _render_compare_cvs():
         expander_label = f"{r['name']} ({c['dosya']})" if r.get("name") else c["dosya"]
         with st.expander(expander_label):
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric(tr("Tahmini Deneyim"), tr(f"{r['experience_years']} yıl") if r["experience_years"] else "—")
+            c1.metric(tr("Tahmini Deneyim"), trf("{years} yıl", years=r['experience_years']) if r["experience_years"] else "—")
             c2.metric(tr("Eğitim Düzeyi"), r["education"] or "—")
             c3.metric(tr("Genel Skor"), general_score(r))
             c4.metric(tr("Tahmini İşe Uygunluk Olasılığı"), f"%{hire_likelihood(r, c['match'])}")
@@ -537,7 +556,7 @@ def _render_deep_analysis():
         "yinelenen_aday": find_duplicate_candidate(subject_text, subject_result, other_candidates),
     }
 
-    st.success(tr(f"Analiz edilen CV: **{subject_name}**"))
+    st.success(trf("Analiz edilen CV: **{name}**", name=subject_name))
 
     ats = result["ats_uyum"]
     st.markdown(tr("### 1️⃣ ATS Uyum Skoru"))
@@ -587,9 +606,10 @@ def _render_deep_analysis():
     st.markdown(tr("### 4️⃣ Yinelenen Aday Kontrolü"))
     yinelenen = result["yinelenen_aday"]
     if yinelenen["bulundu_mu"]:
-        st.warning(tr(
-            f"Olası eşleşme: **{yinelenen['eslesen_kayit']}** "
-            f"(benzerlik: %{yinelenen['benzerlik_orani']}). {yinelenen['aciklama']}"
+        st.warning(trf(
+            "Olası eşleşme: **{kayit}** (benzerlik: %{benzerlik}). {aciklama}",
+            kayit=yinelenen['eslesen_kayit'], benzerlik=yinelenen['benzerlik_orani'],
+            aciklama=tr(yinelenen['aciklama']),
         ))
     else:
         st.success(tr(yinelenen["aciklama"]) if yinelenen["aciklama"] else tr("Yinelenen aday bulunamadı."))

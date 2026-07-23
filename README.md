@@ -15,6 +15,8 @@ hiperparametrelerle) kullanır.
 
 - **📁 Dataset Analizi**
   - Genel amaçlı veri keşfi ve görselleştirme (herhangi bir yüklenen veri setinde çalışır)
+  - Otomatik veri kalitesi & içgörü raporu (`src/data_insights.py`): eksik değer, aykırı değer,
+    yinelenen satır, yüksek kardinaliteli kolon tespiti ve öne çıkan otomatik içgörüler
   - Veri seti dahili İK şemasına uyuyorsa ek alt modüller açılır:
     - **Çalışan Kaybı Tahmini** — LightGBM ile risk skoru, SHAP açıklamaları
     - **Performans Analizi**
@@ -28,6 +30,14 @@ hiperparametrelerle) kullanır.
   haber/başlık toplama, sözlük tabanlı duygu analizi ve öne çıkan konu çıkarımı
 
 Her panelin sonucu JSON / PDF / CSV olarak dışa aktarılabilir.
+
+## Dil Desteği
+
+Uygulama arayüzü Türkçe (varsayılan), İngilizce ve Almanca olarak kullanılabilir
+(`app/translator.py`, deep-translator/Google Translate tabanlı, sonuçlar diske
+önbelleğe alınır). **Yalnızca TR/EN/DE arayüz çevirisi internet ve dış bir servis
+gerektirir** — dil "Türkçe" iken uygulama tamamen çevrimdışı çalışabilir (Şirket
+Analizi paneli hariç, o zaten internet gerektirir).
 
 ## Tema
 
@@ -45,6 +55,7 @@ renkleri (kategorik/durum paleti) CVD-güvenli olduğu için temadan bağımsız
 - **Görselleştirme:** Plotly
 - **Dosya I/O:** openpyxl, pypdf, python-docx, fpdf2 (Türkçe karakter destekli PDF export)
 - **Web scraping:** requests, BeautifulSoup4
+- **Çeviri:** deep-translator (Google Translate, TR/EN/DE arayüz desteği)
 
 ## Kurulum
 
