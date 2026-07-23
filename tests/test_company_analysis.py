@@ -1,11 +1,15 @@
 import xml.etree.ElementTree as ET
 
 import pandas as pd
+import requests
 
+import company_analysis
 from company_analysis import (
     _detect_segments,
     _parse_atom_entries,
     _parse_standard_rss,
+    _reddit_rss,
+    _request_with_retry,
     _resolve_article_link,
     analyze_sentiment,
     reputation_score,
@@ -13,6 +17,20 @@ from company_analysis import (
     sentiment_timeline,
     turkish_lower,
 )
+
+
+class _FakeResponse:
+    """requests.Response'un testlerde ihtiyaç duyulan minimal bir taklidi."""
+
+    def __init__(self, status_code=200, headers=None, content=b"", text=""):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.content = content
+        self.text = text
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code}")
 
 
 def test_turkish_lower_handles_dotted_capital_i():
@@ -160,6 +178,131 @@ def test_resolve_article_link_extracts_real_url_from_bing_redirect():
 def test_resolve_article_link_returns_link_unchanged_when_not_bing_redirect():
     link = "https://news.google.com/rss/articles/abc"
     assert _resolve_article_link(link) == link
+
+
+# ── _request_with_retry() ───────────────────────────────────────────────
+# Reddit RSS gibi kaynaklar birkaç ardışık istekten sonra HTTP 429 (çok istek)
+# döndürebiliyor (gerçek ağ testinde gözlemlendi); bu testler gerçek ağa hiç
+# çıkmadan yeniden deneme mantığını doğrular.
+
+def test_request_with_retry_succeeds_immediately_without_sleeping(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(company_analysis.time, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(company_analysis.requests, "get", lambda *a, **k: _FakeResponse(200, content=b"ok"))
+
+    resp = _request_with_retry("https://example.com")
+    assert resp is not None and resp.status_code == 200
+    assert sleeps == []  # mutlu senaryoda hiç bekleme olmamalı
+
+
+def test_request_with_retry_retries_after_429_respecting_retry_after_header(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(company_analysis.time, "sleep", lambda s: sleeps.append(s))
+    calls = {"n": 0}
+
+    def fake_get(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _FakeResponse(429, headers={"Retry-After": "2"})
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(company_analysis.requests, "get", fake_get)
+
+    resp = _request_with_retry("https://example.com")
+    assert resp is not None and resp.status_code == 200
+    assert calls["n"] == 2
+    assert sleeps == [2.0]
+
+
+def test_request_with_retry_uses_fixed_backoff_when_no_retry_after_header(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(company_analysis.time, "sleep", lambda s: sleeps.append(s))
+    calls = {"n": 0}
+
+    def fake_get(*a, **k):
+        calls["n"] += 1
+        return _FakeResponse(503) if calls["n"] == 1 else _FakeResponse(200)  # geçici sunucu hatası
+
+    monkeypatch.setattr(company_analysis.requests, "get", fake_get)
+
+    resp = _request_with_retry("https://example.com", backoff_seconds=1.5)
+    assert resp is not None and calls["n"] == 2
+    assert sleeps == [1.5]
+
+
+def test_request_with_retry_caps_wait_at_max_wait_seconds(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(company_analysis.time, "sleep", lambda s: sleeps.append(s))
+    calls = {"n": 0}
+
+    def fake_get(*a, **k):
+        calls["n"] += 1
+        return _FakeResponse(429, headers={"Retry-After": "999"}) if calls["n"] == 1 else _FakeResponse(200)
+
+    monkeypatch.setattr(company_analysis.requests, "get", fake_get)
+
+    _request_with_retry("https://example.com")
+    assert sleeps == [company_analysis._RETRY_MAX_WAIT_SECONDS]
+
+
+def test_request_with_retry_gives_up_after_max_retries_and_returns_none(monkeypatch):
+    monkeypatch.setattr(company_analysis.time, "sleep", lambda s: None)
+    monkeypatch.setattr(company_analysis.requests, "get", lambda *a, **k: _FakeResponse(429))
+
+    assert _request_with_retry("https://example.com", max_retries=1) is None
+
+
+def test_request_with_retry_returns_none_immediately_on_connection_error_without_retry(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(company_analysis.time, "sleep", lambda s: sleeps.append(s))
+
+    def fake_get(*a, **k):
+        raise requests.ConnectionError("bağlantı hatası")
+
+    monkeypatch.setattr(company_analysis.requests, "get", fake_get)
+
+    assert _request_with_retry("https://example.com") is None
+    assert sleeps == []  # bağlantı hatasında tekrar denenmez, hemen pes edilir
+
+
+def test_request_with_retry_returns_none_on_non_retryable_http_error(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(company_analysis.time, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(company_analysis.requests, "get", lambda *a, **k: _FakeResponse(404))
+
+    assert _request_with_retry("https://example.com") is None
+    assert sleeps == []  # 404 yeniden denenecek bir durum değil
+
+
+def test_request_with_retry_supports_post_method(monkeypatch):
+    monkeypatch.setattr(company_analysis.requests, "post", lambda *a, **k: _FakeResponse(200))
+    resp = _request_with_retry("https://example.com", method="post")
+    assert resp is not None and resp.status_code == 200
+
+
+def test_reddit_rss_recovers_after_single_429_then_success(monkeypatch):
+    monkeypatch.setattr(company_analysis.time, "sleep", lambda s: None)
+    atom_xml = b"""<?xml version="1.0"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <entry>
+        <title>Sirket hakkinda bir gonderi</title>
+        <link href="https://www.reddit.com/r/example/comments/abc123/"/>
+        <updated>2024-01-01T10:00:00+00:00</updated>
+      </entry>
+    </feed>"""
+    calls = {"n": 0}
+
+    def fake_get(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _FakeResponse(429, headers={"Retry-After": "1"})
+        return _FakeResponse(200, content=atom_xml)
+
+    monkeypatch.setattr(company_analysis.requests, "get", fake_get)
+
+    results = _reddit_rss("Turkcell")
+    assert len(results) == 1
+    assert results[0]["başlık"] == "Sirket hakkinda bir gonderi"
 
 
 def test_parse_atom_entries_extracts_reddit_style_fields():

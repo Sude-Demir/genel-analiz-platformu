@@ -32,11 +32,19 @@ SKILL_GROUPS: dict[str, list[str]] = {
         "python", "sql", "excel", "power bi", "tableau", "pandas", "numpy",
         "makine öğrenmesi", "machine learning", "r dili", "istatistik",
         "veri analizi", "veri bilimi", "veri görselleştirme", "büyük veri",
+        "derin öğrenme", "yapay zeka", "doğal dil işleme", "tensorflow",
+        "pytorch", "apache spark", "veri mühendisliği", "airflow",
     ],
     "Yazılım Geliştirme": [
         "java", "c++", "c#", "javascript", "typescript", "react", "node.js",
         "spring", ".net", "git", "docker", "kubernetes", "api geliştirme",
-        "yazılım geliştirme", "algoritma", "mikroservis",
+        "yazılım geliştirme", "algoritma", "mikroservis", "go dili", "rust dili",
+        "next.js", "vue.js", "angular", "graphql", "postgresql", "mongodb",
+    ],
+    "Bulut & DevOps": [
+        "amazon web services", "azure", "google cloud", "terraform", "ansible",
+        "ci/cd", "jenkins", "linux", "bulut bilişim", "devops", "docker",
+        "kubernetes", "site reliability engineering",
     ],
     "Proje / Ürün Yönetimi": [
         "proje yönetimi", "scrum", "agile", "kanban", "jira", "ürün yönetimi",
@@ -83,6 +91,7 @@ POSITION_MAP: dict[str, list[str]] = {
     "İnsan Kaynakları Uzmanı": ["İnsan Kaynakları"],
     "UI/UX Tasarımcı": ["Tasarım"],
     "Takım Lideri / Operasyon Yöneticisi": ["Liderlik / Yönetim", "Proje / Ürün Yönetimi"],
+    "Bulut / DevOps Mühendisi": ["Bulut & DevOps"],
 }
 
 EDUCATION_LEVELS: dict[str, list[str]] = {
@@ -117,6 +126,11 @@ SKILL_SYNONYMS: dict[str, list[str]] = {
     "node.js": ["nodejs"],
     "c++": ["cpp"],
     "c#": ["c sharp", "csharp"],
+    "rust dili": ["rust"],
+    "amazon web services": ["aws"],
+    "google cloud": ["gcp"],
+    "site reliability engineering": ["sre"],
+    "apache spark": ["spark"],
 }
 # Kısaltmalar kelime sınırıyla (\b) eşleştirilir; aksi halde "ik" gibi kısa bir
 # kısaltma "yöneticilik" gibi kelimelerin içinde yanlışlıkla eşleşebilirdi.
@@ -288,20 +302,29 @@ def analyze_cv(text: str) -> dict:
     if not strengths:
         strengths.append("Belirgin bir güçlü yön tespit edilemedi; CV'nin daha fazla ayrıntı içermesi önerilir.")
 
+    improvement_tips: list[str] = []
+
     if word_count < 150:
         weaknesses.append("CV oldukça kısa; deneyim ve başarılar daha detaylı anlatılabilir.")
+        improvement_tips.append("CV'nin 150 kelimenin üzerine çıkarılarak deneyim ve sorumlulukların daha ayrıntılı anlatılması önerilir.")
     if not has_quantified_results:
         weaknesses.append("Somut, ölçülebilir başarılar (sayı, yüzde, oran) eksik görünüyor.")
+        improvement_tips.append("Başarıların sayısal olarak ifade edilmesi önerilir (örn. \"satışları %20 artırdı\", \"50 kişilik ekip yönetti\").")
     if not all_skills:
         weaknesses.append("Belirgin bir teknik/işlevsel beceri anahtar kelimesi tespit edilemedi.")
+        improvement_tips.append("Kullanılan araç, teknoloji veya yöntemlerin CV'ye anahtar kelime olarak açıkça eklenmesi önerilir.")
     elif len(skills) == 1:
         weaknesses.append("Beceri seti tek bir alanla sınırlı görünüyor; çapraz yetkinlik eklemek faydalı olabilir.")
+        improvement_tips.append("Tek bir alana odaklanmak yerine farklı beceri alanlarından da örnekler eklenerek çok yönlülüğün gösterilmesi önerilir.")
     if experience_years is None:
         weaknesses.append("Deneyim süresi CV'de net biçimde belirtilmemiş.")
+        improvement_tips.append("Deneyim süresinin net biçimde belirtilmesi önerilir (örn. \"3 yıllık deneyim\" ya da başlangıç-bitiş tarihleri).")
     if not contact["email"] and not contact["phone"]:
         weaknesses.append("İletişim bilgileri (e-posta/telefon) eksik veya net değil.")
+        improvement_tips.append("İletişim bilgilerinin (e-posta, telefon) CV'nin üst kısmına eklenmesi önerilir.")
     if not has_language:
         weaknesses.append("Yabancı dil bilgisi belirtilmemiş.")
+        improvement_tips.append("Yabancı dil bilgisinin (varsa) CV'ye eklenmesi önerilir; birçok pozisyon için değerlendirme kriteridir.")
     if not weaknesses:
         weaknesses.append("Belirgin bir zayıf yön tespit edilemedi.")
 
@@ -330,6 +353,7 @@ def analyze_cv(text: str) -> dict:
         "word_count": word_count,
         "strengths": strengths,
         "weaknesses": weaknesses,
+        "improvement_tips": improvement_tips,
         "position_suggestions": position_scores[:5],
     }
 

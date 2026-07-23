@@ -40,7 +40,7 @@ Lint konfigürasyonu (flake8, ruff vb.) bulunmamaktadır.
 
 ### SPA kabuğu (`app/Home.py`)
 
-Streamlit'in çoklu-sayfa (multipage) gezinmesi **kullanılmaz**. Bunun yerine tek script + `st.session_state["active_panel"]` deseniyle sol menüden 3 panel arasında geçiş yapılır (sayfa/URL değişmez). Yeni bir üst düzey panel eklerken bu deseni takip et: `PANELS` sözlüğüne `{"label", "render"}` ekle.
+Streamlit'in çoklu-sayfa (multipage) gezinmesi **kullanılmaz**. Bunun yerine tek script + `st.session_state["active_panel"]` deseniyle sol menüden 3 panel arasında geçiş yapılır (sayfa/URL değişmez). Yeni bir üst düzey panel eklerken bu deseni takip et: `PANELS` sözlüğüne `{"render": ...}` ve eşleşen anahtarla `PANEL_LABELS_TR` sözlüğüne emoji'li etiketini ekle (etiket `tr()` ile çevrilir, ayrıca çeviri için ayrı bir kayıt gerekmez).
 
 ### İki ayrı modelleme yolu (kasıtlı olarak birbirinden bağımsız)
 
@@ -51,7 +51,7 @@ Her iki yol da SHAP `TreeExplainer` ile açıklanabilirlik sağlar; SHAP değerl
 
 ### Panel/modül hiyerarşisi
 
-- `app/panels/dataset_panel.py`, `cv_panel.py`, `company_panel.py` — üç ana panel, `Home.py`'deki `PANELS` sözlüğünden çağrılır.
+- `app/panels/dataset_panel.py`, `cv_panel.py`, `company_panel.py` — üç ana panel, `Home.py`'deki `PANELS` sözlüğünden çağrılır. `company_panel.py` içinde, tekil şirket analizinin altında `_render_compare_section()` ile ayrı bir "⚖️ Şirket Karşılaştır" kısmı da render edilir (aynı `_cached_scan` önbelleğini paylaşır) — bağımsız bir üst düzey panel değildir.
 - `app/panels/hr_modules/` — yalnızca **Dataset Analizi** panelinin altında, aktif veri seti gerekli İK şemasını (`REQUIRED_HR_COLUMNS` = `CATEGORICAL_FEATURES + NUMERIC_FEATURES + ["CalisanID", "Attrition"]`) sağladığında **ve** eğitilmiş model dosyası mevcut olduğunda görünen alt modüller: `attrition.py` (risk skoru hesaplayıcı), `performance.py`, `salary_career.py`, `action_center.py` (SHAP → aksiyon önerisi), `auto_model_module.py` (şemadan bağımsız, her veri setinde çalışır).
 - Yeni bir İK'ya özgü alt modül eklerken `dataset_panel.py` içindeki `options` listesine ve `secim ==` dallanmasına eklemeyi unutma; şema kontrolü zaten `has_hr_schema` ile yapılıyor.
 

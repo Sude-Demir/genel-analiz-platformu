@@ -6,7 +6,7 @@ burada özellik listeleri sabit değil, çalışma zamanında verilen veri setin
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import classification_report, r2_score, roc_auc_score, root_mean_squared_error
+from sklearn.metrics import classification_report, confusion_matrix, r2_score, roc_auc_score, roc_curve, root_mean_squared_error
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
@@ -53,7 +53,16 @@ def train_auto_model(df: pd.DataFrame, target_col: str, categorical_features: li
     X = df[categorical_features + numeric_features]
     y = df[target_col]
 
-    if task_type == "classification" and (y.dtype == object or y.dtype.name == "category"):
+    # pd.api.types.is_string_dtype() burada bilinçli olarak object/category dtype
+    # kontrolüne ek olarak kullanılır: pandas'ın yeni nullable "string" dtype'ı
+    # (pd.StringDtype) ne object ne de category olarak raporlanır, bu da hedef
+    # kolon bu tipteyse (örn. CSV'den pyarrow destekli okuma ile gelen metin
+    # kolonları) kategorik koda çevrilmeden ham string olarak kalmasına ve
+    # roc_curve/roc_auc_score gibi sayısal etiket bekleyen fonksiyonların
+    # ValueError fırlatmasına yol açıyordu.
+    if task_type == "classification" and (
+        y.dtype == object or y.dtype.name == "category" or pd.api.types.is_string_dtype(y)
+    ):
         y = y.astype("category").cat.codes
         class_labels = list(df[target_col].astype("category").cat.categories)
     else:
@@ -66,6 +75,8 @@ def train_auto_model(df: pd.DataFrame, target_col: str, categorical_features: li
     pipeline.fit(X_train, y_train)
 
     metrics: dict = {}
+    cm: list[list[int]] | None = None
+    roc: dict | None = None
     n_classes = y.nunique() if task_type == "classification" else None
     if task_type == "classification":
         y_pred = pipeline.predict(X_test)
@@ -79,6 +90,13 @@ def train_auto_model(df: pd.DataFrame, target_col: str, categorical_features: li
         except ValueError:
             metrics["roc_auc"] = None
         metrics["report"] = classification_report(y_test, y_pred, output_dict=True)
+        cm = confusion_matrix(y_test, y_pred).tolist()
+        if n_classes == 2:
+            try:
+                fpr, tpr, _ = roc_curve(y_test, y_proba[:, 1])
+                roc = {"fpr": fpr.tolist(), "tpr": tpr.tolist()}
+            except ValueError:
+                roc = None
     else:
         y_pred = pipeline.predict(X_test)
         metrics["r2"] = float(r2_score(y_test, y_pred))
@@ -90,6 +108,8 @@ def train_auto_model(df: pd.DataFrame, target_col: str, categorical_features: li
         "n_classes": n_classes,
         "class_labels": class_labels,
         "metrics": metrics,
+        "confusion_matrix": cm,
+        "roc_curve": roc,
         "categorical_features": categorical_features,
         "numeric_features": numeric_features,
         "target_col": target_col,

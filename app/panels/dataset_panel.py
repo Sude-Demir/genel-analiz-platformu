@@ -167,6 +167,15 @@ def _render_general_stats(df: pd.DataFrame, name: str):
 
 
 def render():
+    """Panelin iki bağımsız kısmını sırayla render eder. _render_upload_and_analysis_section()
+    içindeki erken "return"lerin (henüz veri yüklenmemişse) _render_compare_section()
+    çağrısını engellememesi için ikisi ayrı fonksiyonlarda tutulur."""
+    _render_upload_and_analysis_section()
+    st.divider()
+    _render_compare_section()
+
+
+def _render_upload_and_analysis_section():
     st.subheader(tr("Veri Seti Yükle"))
     kaynak_dosya = tr("Dosya Yükle")
     kaynak_dahili = tr("Dahili İK Örnek Verisi")
@@ -238,3 +247,159 @@ def render():
         salary_career.render(df)
     elif secim == modul_action:
         action_center.render(df, bundle["pipeline"], explainer)
+
+
+def _render_compare_section():
+    """Dataset Analizi panelinin içindeki ayrı bir kısım: iki veri setini
+    (örn. bu ay ve geçen ay verisi) yan yana karşılaştırır. Yukarıdaki tekil
+    veri seti analizinden bağımsız çalışır."""
+    st.markdown(tr("## 📊 İki Veri Setini Karşılaştır"))
+    st.caption(tr(
+        "İki veri seti yükleyin (örn. bu ay ve geçen ay verisi); satır/kolon sayısı, "
+        "veri kalitesi ve ortak sayısal kolonların ortalamaları yan yana karşılaştırılır."
+    ))
+
+    c1, c2 = st.columns(2)
+    with c1:
+        upload_a = st.file_uploader(tr("1. Veri Seti"), type=["csv", "xlsx", "xls", "json"], key="ds_compare_upload_a")
+    with c2:
+        upload_b = st.file_uploader(tr("2. Veri Seti"), type=["csv", "xlsx", "xls", "json"], key="ds_compare_upload_b")
+
+    c3, c4 = st.columns([1, 3])
+    with c3:
+        ornek_clicked = st.button(tr("🔎 Örnek Dene"), key="ds_compare_example_btn", use_container_width=True)
+    with c4:
+        compare_clicked = st.button(
+            tr("Karşılaştır"), type="primary",
+            disabled=not (upload_a and upload_b), key="ds_compare_btn",
+        )
+
+    if ornek_clicked:
+        if not data_ready():
+            st.warning(tr("Dahili İK veri seti bulunamadı. Önce `python src/data_prep.py` çalıştırın."))
+        else:
+            emp = load_employees()
+            yari = len(emp) // 2
+            st.session_state["ds_compare_data"] = {
+                "a": {"name": tr("İK Verisi — İlk Yarı"), "df": emp.iloc[:yari].reset_index(drop=True)},
+                "b": {"name": tr("İK Verisi — İkinci Yarı"), "df": emp.iloc[yari:].reset_index(drop=True)},
+            }
+
+    if compare_clicked and upload_a and upload_b:
+        try:
+            with st.spinner(tr("Veri setleri okunuyor...")):
+                df_a = load_uploaded(upload_a)
+                df_b = load_uploaded(upload_b)
+            st.session_state["ds_compare_data"] = {
+                "a": {"name": upload_a.name, "df": df_a},
+                "b": {"name": upload_b.name, "df": df_b},
+            }
+        except Exception as exc:
+            st.error(trf("Veri setleri okunamadı. ({hata})", hata=exc))
+
+    if "ds_compare_data" not in st.session_state:
+        st.info(tr("Karşılaştırmak için iki veri seti yükleyip 'Karşılaştır' butonuna tıklayın veya 'Örnek Dene' ile hemen deneyin."))
+        return
+
+    data = st.session_state["ds_compare_data"]
+    a, b = data["a"], data["b"]
+    df_a, df_b = a["df"], b["df"]
+    name_a, name_b = a["name"], b["name"]
+
+    with st.container(border=True):
+        st.markdown(tr("**Genel Karşılaştırma**"))
+        cols = st.columns(2)
+        for col, name, df in [(cols[0], name_a, df_a), (cols[1], name_b, df_b)]:
+            with col:
+                st.markdown(f"**{name}**")
+                st.metric(tr("Satır Sayısı"), len(df))
+                st.metric(tr("Kolon Sayısı"), len(df.columns))
+
+    ortak_kolonlar = sorted(set(df_a.columns) & set(df_b.columns))
+    sadece_a = sorted(set(df_a.columns) - set(df_b.columns))
+    sadece_b = sorted(set(df_b.columns) - set(df_a.columns))
+    if sadece_a or sadece_b:
+        with st.expander(tr("Kolon Farklılıkları")):
+            if sadece_a:
+                st.write(trf("Yalnızca {name}'de olan kolonlar: {cols}", name=name_a, cols=', '.join(sadece_a)))
+            if sadece_b:
+                st.write(trf("Yalnızca {name}'de olan kolonlar: {cols}", name=name_b, cols=', '.join(sadece_b)))
+
+    quality_a = data_quality_report(df_a)
+    quality_b = data_quality_report(df_b)
+    with st.container(border=True):
+        st.markdown(tr("**Veri Kalitesi Karşılaştırması**"))
+        cols = st.columns(2)
+        for col, name, df, q in [(cols[0], name_a, df_a, quality_a), (cols[1], name_b, df_b, quality_b)]:
+            with col:
+                st.markdown(f"**{name}**")
+                toplam_hucre = len(df) * len(df.columns)
+                eksik_oran = (df.isna().sum().sum() / toplam_hucre * 100) if toplam_hucre else 0
+                st.metric(tr("Yinelenen Satır"), q["yinelenen_satir"])
+                st.metric(tr("Toplam Eksik Hücre Oranı"), f"%{round(eksik_oran, 1)}")
+
+    numeric_a, _ = infer_column_types(df_a)
+    numeric_b, _ = infer_column_types(df_b)
+    ortak_sayisal = [c for c in ortak_kolonlar if c in numeric_a and c in numeric_b]
+
+    comp_table = pd.DataFrame()
+    if ortak_sayisal:
+        with st.container(border=True):
+            st.markdown(tr("**Ortak Sayısal Kolonların Ortalama Karşılaştırması**"))
+            rows = []
+            for col in ortak_sayisal:
+                mean_a, mean_b = df_a[col].mean(), df_b[col].mean()
+                fark = mean_b - mean_a if pd.notna(mean_a) and pd.notna(mean_b) else None
+                fark_yuzde = (fark / mean_a * 100) if fark is not None and mean_a else None
+                rows.append({
+                    tr("Kolon"): col,
+                    trf("Ortalama — {name}", name=name_a): round(mean_a, 2) if pd.notna(mean_a) else None,
+                    trf("Ortalama — {name}", name=name_b): round(mean_b, 2) if pd.notna(mean_b) else None,
+                    tr("Fark"): round(fark, 2) if fark is not None else None,
+                    tr("Fark (%)"): round(fark_yuzde, 1) if fark_yuzde is not None else None,
+                })
+            comp_table = pd.DataFrame(rows)
+            st.dataframe(comp_table, width="stretch", hide_index=True)
+    else:
+        st.caption(tr("Ortak sayısal kolon bulunamadığı için ortalama karşılaştırması yapılamadı."))
+
+    st.markdown(tr("### Dışa Aktar"))
+    c1, c2 = st.columns(2)
+    with c1:
+        json_payload = {
+            "karsilastirma": [
+                {"veri_seti": name_a, "satir_sayisi": len(df_a), "kolon_sayisi": len(df_a.columns), "veri_kalitesi": quality_a},
+                {"veri_seti": name_b, "satir_sayisi": len(df_b), "kolon_sayisi": len(df_b.columns), "veri_kalitesi": quality_b},
+            ],
+            "ortak_kolonlar": ortak_kolonlar,
+            "yalnizca_a_kolonlar": sadece_a,
+            "yalnizca_b_kolonlar": sadece_b,
+            "ortak_sayisal_kolon_karsilastirmasi": comp_table.to_dict(orient="records"),
+        }
+        st.download_button(
+            tr("JSON indir"), data=to_json_bytes(json_payload),
+            file_name=f"{name_a}_vs_{name_b}_karsilastirma.json", mime="application/json",
+            key="ds_compare_json",
+        )
+    with c2:
+        blocks = [
+            {"heading": tr("Genel Bilgiler"), "type": "table", "content": (
+                [tr("Veri Seti"), tr("Satır Sayısı"), tr("Kolon Sayısı"), tr("Yinelenen Satır")],
+                [
+                    [name_a, len(df_a), len(df_a.columns), quality_a["yinelenen_satir"]],
+                    [name_b, len(df_b), len(df_b.columns), quality_b["yinelenen_satir"]],
+                ],
+            )},
+        ]
+        if not comp_table.empty:
+            blocks.append({"heading": tr("Ortak Sayısal Kolon Ortalama Karşılaştırması"), "type": "table", "content": (
+                list(comp_table.columns), [tuple(row) for row in comp_table.itertuples(index=False)],
+            )})
+        pdf_bytes = build_pdf(
+            trf("Veri Seti Karşılaştırma Raporu — {a} vs {b}", a=name_a, b=name_b), blocks,
+        )
+        st.download_button(
+            tr("PDF indir"), data=pdf_bytes,
+            file_name=f"{name_a}_vs_{name_b}_karsilastirma.pdf", mime="application/pdf",
+            key="ds_compare_pdf",
+        )

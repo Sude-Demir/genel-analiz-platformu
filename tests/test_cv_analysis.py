@@ -238,6 +238,56 @@ def test_find_skills_matches_abbreviation_synonym():
     assert "machine learning" in all_skills
 
 
+def test_find_skills_detects_new_cloud_devops_group_via_synonyms():
+    # AWS/GCP/SRE kisaltmalari kelime siniriyla (\b) kanonik forma esleşmeli.
+    skills = find_skills(turkish_lower("AWS, GCP ve SRE deneyimim var, Terraform kullanıyorum."))
+    all_skills = {kw for kws in skills.values() for kw in kws}
+    assert "amazon web services" in all_skills
+    assert "google cloud" in all_skills
+    assert "site reliability engineering" in all_skills
+    assert "Bulut & DevOps" in skills
+
+
+def test_find_skills_rust_synonym_does_not_match_inside_trust():
+    # "rust" onceden ham alt dize olarak eklenseydi "trustworthy" icindeki
+    # "rust"u yanlislikla eslestirirdi; kelime siniri bu riski onlemeli.
+    skills = find_skills(turkish_lower("Takım içinde güvenilir (trustworthy) bir çalışma ortamı kurdum."))
+    all_skills = {kw for kws in skills.values() for kw in kws}
+    assert "rust dili" not in all_skills
+
+
+def test_analyze_cv_returns_improvement_tips_for_weak_cv():
+    result = analyze_cv("Mehmet Kaya\nBiraz deneyimim var.\n")
+    assert result["improvement_tips"], "zayıf bir CV için iyileştirme önerisi üretilmeli"
+    assert any("150 kelime" in tip for tip in result["improvement_tips"])
+
+
+def test_analyze_cv_improvement_tips_empty_for_strong_cv():
+    strong_cv = (
+        "Zeynep Aydın\n"
+        "E-posta: zeynep.aydin@example.com | Telefon: 0532 999 88 77\n\n"
+        "8 yıllık deneyimim boyunca Python, SQL, Power BI, Tableau, makine öğrenmesi "
+        "ve büyük veri projelerinde çalıştım. Satışları %35 artırdım, 20 kişilik bir "
+        "ekip yönettim ve 100'den fazla rapor ürettim. İngilizce ve Almanca biliyorum. "
+        "AWS sertifikası sahibiyim. Çalıştığım kurumlarda veri odaklı karar alma "
+        "kültürünü yerleştirdim ve birden fazla departmanla yakın iş birliği içinde "
+        "çalıştım. Yönettiğim projelerde maliyetleri %15 oranında azalttım ve müşteri "
+        "memnuniyetini artıran raporlama süreçleri kurdum. Ekip üyelerinin gelişimine "
+        "mentorluk yaparak katkı sağladım ve şirket içi eğitim programları düzenledim. "
+        "Ayrıca yeni teknolojilere hızlı adapte olarak süreçlerin dijitalleşmesine "
+        "öncülük ettim ve üst yönetime düzenli olarak stratejik raporlar sundum. "
+        "Proje yönetimi metodolojilerini (Scrum, Kanban) kullanarak çevik ekipler "
+        "kurdum ve paydaşlarla düzenli iletişim sağladım. Farklı sektörlerden "
+        "gelen paydaşlarla iş birliği yaparak ortak hedeflere ulaşılmasını "
+        "sağladım ve süreç iyileştirme çalışmalarına liderlik ettim. Düzenli "
+        "olarak sektör konferanslarına katılıp güncel gelişmeleri takip ettim "
+        "ve edindiğim bilgileri ekip içinde paylaşarak ortak öğrenme kültürü "
+        "oluşturdum. Kariyerim boyunca sürekli kendimi geliştirmeye önem verdim.\n"
+    )
+    result = analyze_cv(strong_cv)
+    assert result["improvement_tips"] == []
+
+
 def test_find_skills_synonym_uses_word_boundary_not_substring():
     # "ik" İnsan Kaynakları kısaltmasıdır ama "yöneticilik" kelimesinin içinde
     # yanlışlıkla eşleşmemelidir (kelime sınırı kontrolü).

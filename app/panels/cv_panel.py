@@ -132,6 +132,19 @@ def _render_single_cv():
         for w in result["weaknesses"]:
             st.markdown(f"- {tr(w)}")
 
+    likelihood = hire_likelihood(result, None)
+    likelihood_status = risk_status(1 - likelihood / 100)
+    if likelihood_status in ("serious", "critical") and result["improvement_tips"]:
+        with st.container(border=True):
+            st.markdown(tr("### 📝 CV'nizi Güçlendirmek İçin Öneriler"))
+            st.caption(trf(
+                "Tahmini işe uygunluk olasılığı %{val} — beklenenin altında görünüyor. "
+                "Aşağıdaki noktalar CV'nizi güçlendirmenize yardımcı olabilir.",
+                val=likelihood,
+            ))
+            for tip in result["improvement_tips"]:
+                st.markdown(f"- {tr(tip)}")
+
     st.markdown(tr("### 🎯 Uygun Pozisyon Önerileri"))
     if result["position_suggestions"]:
         st.dataframe(pd.DataFrame(result["position_suggestions"]), width="stretch", hide_index=True)
@@ -252,6 +265,8 @@ def _render_single_cv():
             )})
         blocks.append({"heading": "Güçlü Yönler", "type": "bullets", "content": result["strengths"]})
         blocks.append({"heading": "Gelişime Açık Yönler", "type": "bullets", "content": result["weaknesses"]})
+        if result["improvement_tips"]:
+            blocks.append({"heading": "CV'nizi Güçlendirmek İçin Öneriler", "type": "bullets", "content": result["improvement_tips"]})
         if result["position_suggestions"]:
             blocks.append({"heading": "Uygun Pozisyon Önerileri", "type": "table", "content": (
                 ["Pozisyon", "Uygunluk Skoru", "Eşleşen Beceriler"],
@@ -421,11 +436,12 @@ def _render_compare_cvs():
         r = c["result"]
         expander_label = f"{r['name']} ({c['dosya']})" if r.get("name") else c["dosya"]
         with st.expander(expander_label):
+            candidate_likelihood = hire_likelihood(r, c['match'])
             c1, c2, c3, c4 = st.columns(4)
             c1.metric(tr("Tahmini Deneyim"), trf("{years} yıl", years=r['experience_years']) if r["experience_years"] else "—")
             c2.metric(tr("Eğitim Düzeyi"), r["education"] or "—")
             c3.metric(tr("Genel Skor"), general_score(r))
-            c4.metric(tr("Tahmini İşe Uygunluk Olasılığı"), f"%{hire_likelihood(r, c['match'])}")
+            c4.metric(tr("Tahmini İşe Uygunluk Olasılığı"), f"%{candidate_likelihood}")
 
             st.markdown(tr("**🎯 Tahmin Edilen En Uygun Pozisyonlar**"))
             if r["position_suggestions"]:
@@ -443,6 +459,12 @@ def _render_compare_cvs():
                 st.markdown(tr("### 🔧 Gelişime Açık Yönler"))
                 for w in r["weaknesses"]:
                     st.markdown(f"- {tr(w)}")
+
+            candidate_likelihood_status = risk_status(1 - candidate_likelihood / 100)
+            if candidate_likelihood_status in ("serious", "critical") and r["improvement_tips"]:
+                st.markdown(tr("### 📝 Geliştirme Önerileri"))
+                for tip in r["improvement_tips"]:
+                    st.markdown(f"- {tr(tip)}")
 
             if c["match"] is not None and c["match"]["match_pct"] is not None:
                 m = c["match"]

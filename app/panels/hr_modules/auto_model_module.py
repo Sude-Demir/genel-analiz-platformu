@@ -6,6 +6,7 @@ bir sınıflandırma/regresyon modeli eğitir ve SHAP ile açıklar.
 """
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import shap
 import streamlit as st
 
@@ -18,7 +19,7 @@ from auto_model import (
 )
 from export_utils import build_pdf, to_json_bytes
 from translator import tr, trf
-from theme import CATEGORICAL, apply_layout
+from theme import CATEGORICAL, MUTED, SEQUENTIAL_BLUE, apply_layout
 
 
 def render_manual_prediction(df: pd.DataFrame, result: dict, state_prefix: str):
@@ -120,6 +121,35 @@ def render(df: pd.DataFrame, state_prefix: str):
             m1, m2 = st.columns(2)
             m1.metric(tr("Doğruluk (Accuracy)"), f"{metrics['accuracy']:.1%}")
             m2.metric("ROC-AUC", f"{metrics['roc_auc']:.3f}" if metrics["roc_auc"] is not None else "—")
+
+            cm = result.get("confusion_matrix")
+            roc = result.get("roc_curve")
+            if cm:
+                labels = [str(v) for v in (result.get("class_labels") or range(len(cm)))]
+                eval_cols = st.columns(2) if roc else [st.container()]
+                with eval_cols[0]:
+                    st.markdown(tr("**Karışıklık Matrisi (Confusion Matrix)**"))
+                    fig_cm = px.imshow(
+                        cm, x=labels, y=labels, text_auto=True,
+                        labels={"x": tr("Tahmin Edilen"), "y": tr("Gerçek"), "color": tr("Adet")},
+                        color_continuous_scale=SEQUENTIAL_BLUE,
+                    )
+                    apply_layout(fig_cm)
+                    st.plotly_chart(fig_cm, width="stretch", theme=None)
+                if roc:
+                    with eval_cols[1]:
+                        st.markdown(tr("**ROC Eğrisi**"))
+                        fig_roc = go.Figure()
+                        fig_roc.add_trace(go.Scatter(
+                            x=roc["fpr"], y=roc["tpr"], mode="lines",
+                            name="ROC", line=dict(color=CATEGORICAL[0]),
+                        ))
+                        fig_roc.add_trace(go.Scatter(
+                            x=[0, 1], y=[0, 1], mode="lines",
+                            name=tr("Rastgele"), line=dict(color=MUTED, dash="dash"),
+                        ))
+                        apply_layout(fig_roc, xaxis_title=tr("Yanlış Pozitif Oranı"), yaxis_title=tr("Doğru Pozitif Oranı"))
+                        st.plotly_chart(fig_roc, width="stretch", theme=None)
         else:
             m1, m2 = st.columns(2)
             m1.metric("R²", f"{metrics['r2']:.3f}")
@@ -166,6 +196,7 @@ def render(df: pd.DataFrame, state_prefix: str):
         "hedef_kolon": target_col,
         "gorev_turu": result["task_type"],
         "metrikler": metrics,
+        "karisiklik_matrisi": result.get("confusion_matrix"),
         "ozellik_onem_sirasi": importances.to_dict(),
         "shap_aciklamasi": explanation_row,
     }
@@ -173,19 +204,25 @@ def render(df: pd.DataFrame, state_prefix: str):
     with c1:
         st.download_button(
             tr("JSON indir"), data=to_json_bytes(export_result),
-            file_name="otomatik_model_sonucu.json", mime="application/json", key=f"{state_prefix}_json",
+            file_name="otomatik_model_sonucu.json", mime="application/json", key=f"{state_prefix}_auto_json",
         )
     with c2:
         metric_lines = [f"{k}: {v}" for k, v in metrics.items() if not isinstance(v, dict)]
-        pdf_bytes = build_pdf("Otomatik Model & Açıklama Raporu", [
+        pdf_blocks = [
             {"heading": "Model Bilgisi", "type": "bullets", "content": [
                 f"Hedef kolon: {target_col}", f"Görev türü: {result['task_type']}",
             ] + metric_lines},
-            {"heading": "En Önemli Özellikler", "type": "table", "content": (
-                ["Özellik", "Önem Derecesi"], [[k, round(v, 4)] for k, v in importances.sort_values(ascending=False).head(15).items()],
-            )},
-        ])
+        ]
+        if result.get("confusion_matrix"):
+            cm_labels = [str(v) for v in (result.get("class_labels") or range(len(result["confusion_matrix"])))]
+            pdf_blocks.append({"heading": "Karışıklık Matrisi (Confusion Matrix)", "type": "table", "content": (
+                [""] + cm_labels, [[cm_labels[i]] + row for i, row in enumerate(result["confusion_matrix"])],
+            )})
+        pdf_blocks.append({"heading": "En Önemli Özellikler", "type": "table", "content": (
+            ["Özellik", "Önem Derecesi"], [[k, round(v, 4)] for k, v in importances.sort_values(ascending=False).head(15).items()],
+        )})
+        pdf_bytes = build_pdf("Otomatik Model & Açıklama Raporu", pdf_blocks)
         st.download_button(
             tr("PDF indir"), data=pdf_bytes,
-            file_name="otomatik_model_raporu.pdf", mime="application/pdf", key=f"{state_prefix}_pdf",
+            file_name="otomatik_model_raporu.pdf", mime="application/pdf", key=f"{state_prefix}_auto_pdf",
         )
