@@ -64,7 +64,7 @@ def render():
 
 def _render_single_cv():
     st.subheader(tr("CV Yükle"))
-    st.caption(tr("PDF, DOCX veya TXT formatında bir CV yükleyin. Analiz anahtar kelime tabanlı sezgisel bir yöntemle yapılır; harici bir dil modeli API'sine bağımlı değildir."))
+    st.caption(tr("PDF, DOCX veya TXT formatında bir CV yükleyin. Ollama hazırsa değerlendirme yapay zeka ile yapılır; değilse anahtar kelime tabanlı sezgisel bir yönteme sessizce geri dönülür. Harici/bulut bir API'ye bağımlı değildir."))
     c1, c2 = st.columns([3, 1])
     with c1:
         cv_file = st.file_uploader(tr("CV dosyası"), type=["pdf", "docx", "txt"], key="cv_upload")
@@ -93,7 +93,25 @@ def _render_single_cv():
         st.info(tr("Devam etmek için bir CV dosyası yükleyin veya 'Örnek Dene' ile hemen deneyin."))
         return
 
-    result = analyze_cv(st.session_state["cv_text"])
+    from data_loader import ollama_ready
+    use_llm_review = False
+    if ollama_ready():
+        use_llm_review = st.toggle(
+            tr("🧠 Ollama ile gelişmiş (semantik) CV değerlendirmesi"),
+            value=True, key="cv_analysis_use_llm",
+            help=tr("Yerel Ollama sunucunuz CV'yi bütünsel olarak değerlendirir. "
+                    "Veri makinenizden çıkmaz. Ollama hazır olduğu için bu otomatik "
+                    "olarak açıktır; isterseniz kapatabilirsiniz."),
+        )
+    else:
+        st.caption(tr("💡 Yerel bir Ollama sunucusu çalıştırırsanız burada semantik "
+                      "CV değerlendirmesi seçeneği açılır. (Opsiyonel)"))
+
+    if use_llm_review:
+        with st.spinner(tr("Yerel Ollama modeliyle CV değerlendiriliyor (birkaç dakika sürebilir)...")):
+            result = analyze_cv(st.session_state["cv_text"], use_llm=True)
+    else:
+        result = analyze_cv(st.session_state["cv_text"], use_llm=False)
     file_name = st.session_state["cv_name"]
     if result.get("name"):
         st.success(trf("Analiz edilen aday: **{name}** ({file_name})", name=result['name'], file_name=file_name))
@@ -122,98 +140,118 @@ def _render_single_cv():
     else:
         st.info(tr("Beceri anahtar kelimesi tespit edilemedi."))
 
-    left, right = st.columns(2)
-    with left:
-        st.markdown(tr("### 💪 Güçlü Yönler"))
-        for s in result["strengths"]:
-            st.markdown(f"- {tr(s)}")
-    with right:
-        st.markdown(tr("### 🔧 Gelişime Açık Yönler"))
-        for w in result["weaknesses"]:
-            st.markdown(f"- {tr(w)}")
-
-    likelihood = hire_likelihood(result, None)
-    likelihood_status = risk_status(1 - likelihood / 100)
-    if likelihood_status in ("serious", "critical") and result["improvement_tips"]:
+    llm_review = result.get("llm_review")
+    if use_llm_review and llm_review:
+        # Yalnızca Ollama değerlendirmesi gösterilir — kural tabanlı değerlendirme
+        # (strengths/weaknesses/position_suggestions/improvement_tips) bilinçli
+        # olarak gizlenir; kullanıcı iki ayrı değerlendirme görmek istemiyor.
         with st.container(border=True):
-            st.markdown(tr("### 📝 CV'nizi Güçlendirmek İçin Öneriler"))
-            st.caption(trf(
-                "Tahmini işe uygunluk olasılığı %{val} — beklenenin altında görünüyor. "
-                "Aşağıdaki noktalar CV'nizi güçlendirmenize yardımcı olabilir.",
-                val=likelihood,
-            ))
-            for tip in result["improvement_tips"]:
-                st.markdown(f"- {tr(tip)}")
-
-    st.markdown(tr("### 🎯 Uygun Pozisyon Önerileri"))
-    if result["position_suggestions"]:
-        st.dataframe(pd.DataFrame(result["position_suggestions"]), width="stretch", hide_index=True)
+            st.markdown(tr("### 🧠 Yapay Zeka Değerlendirmesi (Ollama)"))
+            st.write(llm_review["summary"])
+            left, right = st.columns(2)
+            with left:
+                st.markdown(tr("### 💪 Güçlü Yönler"))
+                for s in llm_review["strengths"]:
+                    st.markdown(f"- {s}")
+            with right:
+                st.markdown(tr("### 🔧 Gelişime Açık Yönler"))
+                for w in llm_review["weaknesses"]:
+                    st.markdown(f"- {w}")
+            if llm_review["improvement_tips"]:
+                st.markdown(tr("### 📝 Geliştirme Önerileri"))
+                for tip in llm_review["improvement_tips"]:
+                    st.markdown(f"- {tip}")
+            st.markdown(tr("### 🎯 Uygun Pozisyon Önerileri"))
+            if llm_review["position_suggestions"]:
+                st.write(", ".join(llm_review["position_suggestions"]))
+            else:
+                st.info(tr("Yapay zeka bir pozisyon önerisi üretmedi."))
     else:
-        st.info(tr("Yeterli beceri anahtar kelimesi bulunamadığı için pozisyon önerisi üretilemedi."))
+        if use_llm_review and llm_review is None:
+            st.info(tr("Semantik CV değerlendirmesi şu an alınamadı; kural tabanlı sonuç gösteriliyor."))
+
+        left, right = st.columns(2)
+        with left:
+            st.markdown(tr("### 💪 Güçlü Yönler"))
+            for s in result["strengths"]:
+                st.markdown(f"- {tr(s)}")
+        with right:
+            st.markdown(tr("### 🔧 Gelişime Açık Yönler"))
+            for w in result["weaknesses"]:
+                st.markdown(f"- {tr(w)}")
+
+        likelihood = hire_likelihood(result, None)
+        likelihood_status = risk_status(1 - likelihood / 100)
+        if likelihood_status in ("serious", "critical") and result["improvement_tips"]:
+            with st.container(border=True):
+                st.markdown(tr("### 📝 CV'nizi Güçlendirmek İçin Öneriler"))
+                st.caption(trf(
+                    "Tahmini işe uygunluk olasılığı %{val} — beklenenin altında görünüyor. "
+                    "Aşağıdaki noktalar CV'nizi güçlendirmenize yardımcı olabilir.",
+                    val=likelihood,
+                ))
+                for tip in result["improvement_tips"]:
+                    st.markdown(f"- {tr(tip)}")
+
+        st.markdown(tr("### 🎯 Uygun Pozisyon Önerileri"))
+        if result["position_suggestions"]:
+            st.dataframe(pd.DataFrame(result["position_suggestions"]), width="stretch", hide_index=True)
+        else:
+            st.info(tr("Yeterli beceri anahtar kelimesi bulunamadığı için pozisyon önerisi üretilemedi."))
 
     st.markdown(tr("### 🎯 İlana Göre Eşleştirme"))
     st.caption(tr("Bir iş ilanı metni yapıştırın; CV'deki beceriler ilanla karşılaştırılıp uygunluk yüzdesi hesaplanır."))
     job_text = st.text_area(tr("İş ilanı metni"), height=150, key="cv_job_text")
 
+    from data_loader import ollama_ready
+    use_llm = False
+    if ollama_ready():
+        use_llm = st.toggle(
+            tr("🧠 Ollama ile gelişmiş (semantik) analiz"),
+            value=True, key="cv_use_llm",
+            help=tr("Yerel Ollama sunucunuz kullanılarak CV ve ilan semantik olarak "
+                    "karşılaştırılır. Veri makinenizden çıkmaz. Ollama hazır olduğu için "
+                    "bu otomatik olarak açıktır; isterseniz kapatabilirsiniz."),
+        )
+    else:
+        st.caption(tr("💡 Yerel bir Ollama sunucusu çalıştırırsanız burada semantik "
+                      "analiz seçeneği açılır. (Opsiyonel)"))
+
     match = None
     if job_text.strip():
-        match = match_cv_to_job(st.session_state["cv_text"], job_text)
-        if match["match_pct"] is None:
-            st.warning(tr("İlan metninde tanınan beceri anahtar kelimesi bulunamadı."))
-        elif match["match_pct"] == 0:
-            st.warning(tr("Uygun aday bulunamadı."))
+        if use_llm:
+            with st.spinner(tr("Yerel Ollama modeliyle semantik analiz yapılıyor (birkaç dakika sürebilir)...")):
+                match = match_cv_to_job(st.session_state["cv_text"], job_text, use_llm=True)
         else:
+            match = match_cv_to_job(st.session_state["cv_text"], job_text, use_llm=False)
+
+        insight = match.get("llm_insight")
+
+        if use_llm and insight:
+            # Yalnızca Ollama değerlendirmesi gösterilir — kural tabanlı eşleştirme
+            # (matched/missing_skills, group_breakdown) bilinçli olarak gizlenir.
             with st.container(border=True):
-                status = risk_status(1 - match["match_pct"] / 100)
-                c1, c2, c3 = st.columns(3)
-                c1.metric(tr("Uygunluk Skoru"), f"%{match['match_pct']}")
-                c2.metric(tr("Eşleşen Beceri"), len(match["matched_skills"]))
-                c3.metric(tr("Eksik Beceri"), len(match["missing_skills"]))
+                st.markdown(tr("### 🧠 Yapay Zeka Değerlendirmesi (Ollama)"))
+                status = risk_status(1 - insight["semantic_match_pct"] / 100)
+                st.metric(tr("Semantik Uygunluk Skoru"), f"%{insight['semantic_match_pct']}")
 
                 fig = go.Figure(go.Indicator(
                     mode="gauge+number",
-                    value=match["match_pct"],
+                    value=insight["semantic_match_pct"],
                     number={"suffix": "%"},
                     gauge={"axis": {"range": [0, 100]}, "bar": {"color": STATUS[status]}},
                 ))
                 apply_layout(fig)
                 st.plotly_chart(fig, width="stretch", theme=None)
 
+                st.write(insight["summary"])
                 left, right = st.columns(2)
                 with left:
-                    st.markdown(tr("**✅ Eşleşen Beceriler**"))
-                    st.write(", ".join(match["matched_skills"]) if match["matched_skills"] else "—")
+                    st.markdown(tr("**🔎 İma Edilen Beceriler**"))
+                    st.write(", ".join(insight["implicit_skills"]) if insight["implicit_skills"] else "—")
                 with right:
-                    st.markdown(tr("**❌ Eksik Beceriler**"))
-                    st.write(", ".join(match["missing_skills"]) if match["missing_skills"] else "—")
-
-                if match["missing_skills"]:
-                    st.markdown(tr("**📚 Gelişim Önerileri**"))
-                    for tip in skill_development_tips(match["missing_skills"]):
-                        st.markdown(f"- {tr(tip)}")
-
-                if match["required_experience"] is not None:
-                    if match["candidate_experience"] is not None:
-                        durum = tr("✅ Karşılıyor") if match["experience_met"] else tr("⚠️ Karşılamıyor")
-                        st.caption(trf(
-                            "Deneyim: ilan {required} yıl istiyor, aday ~{candidate} yıl — {durum}",
-                            required=match['required_experience'], candidate=match['candidate_experience'], durum=durum,
-                        ))
-                    else:
-                        st.caption(trf("Deneyim: ilan {required} yıl istiyor, adayın deneyimi CV'de net değil.", required=match['required_experience']))
-
-                if match["group_breakdown"]:
-                    breakdown_df = pd.DataFrame(match["group_breakdown"])
-                    fig2 = px.bar(
-                        breakdown_df, x="İlan Beceri Sayısı", y="Alan", orientation="h",
-                        color_discrete_sequence=[CATEGORICAL[0]],
-                    )
-                    fig2.add_bar(
-                        x=breakdown_df["Eşleşen"], y=breakdown_df["Alan"], orientation="h",
-                        name="Eşleşen", marker_color=CATEGORICAL[1],
-                    )
-                    apply_layout(fig2, barmode="overlay", showlegend=False)
-                    st.plotly_chart(fig2, width="stretch", theme=None)
+                    st.markdown(tr("**❌ Kritik Eksikler**"))
+                    st.write(", ".join(insight["missing_critical"]) if insight["missing_critical"] else "—")
 
             c1, c2 = st.columns(2)
             with c1:
@@ -222,21 +260,100 @@ def _render_single_cv():
                     file_name=f"{file_name}_ilan_eslesme.json", mime="application/json", key="cv_match_json",
                 )
             with c2:
-                match_blocks = [
-                    {"heading": "Uygunluk Skoru", "type": "paragraph", "content": f"%{match['match_pct']}"},
-                    {"heading": "Eşleşen Beceriler", "type": "bullets", "content": match["matched_skills"] or ["—"]},
-                    {"heading": "Eksik Beceriler", "type": "bullets", "content": match["missing_skills"] or ["—"]},
+                insight_blocks = [
+                    {"heading": "Semantik Uygunluk Skoru", "type": "paragraph", "content": f"%{insight['semantic_match_pct']}"},
+                    {"heading": "Değerlendirme Özeti", "type": "paragraph", "content": insight["summary"]},
+                    {"heading": "İma Edilen Beceriler", "type": "bullets", "content": insight["implicit_skills"] or ["—"]},
+                    {"heading": "Kritik Eksikler", "type": "bullets", "content": insight["missing_critical"] or ["—"]},
                 ]
-                if match["missing_skills"]:
-                    match_blocks.append({
-                        "heading": "Gelişim Önerileri", "type": "bullets",
-                        "content": skill_development_tips(match["missing_skills"]),
-                    })
-                pdf_bytes = build_pdf(f"İlan Eşleştirme Raporu — {file_name}", match_blocks)
+                pdf_bytes = build_pdf(f"İlan Eşleştirme Raporu (Ollama) — {file_name}", insight_blocks)
                 st.download_button(
                     tr("PDF indir"), data=pdf_bytes,
                     file_name=f"{file_name}_ilan_eslesme.pdf", mime="application/pdf", key="cv_match_pdf",
                 )
+        else:
+            if use_llm and insight is None:
+                st.info(tr("Semantik analiz şu an alınamadı; kural tabanlı sonuç gösteriliyor."))
+
+            if match["match_pct"] is None:
+                st.warning(tr("İlan metninde tanınan beceri anahtar kelimesi bulunamadı."))
+            elif match["match_pct"] == 0:
+                st.warning(tr("Uygun aday bulunamadı."))
+            else:
+                with st.container(border=True):
+                    status = risk_status(1 - match["match_pct"] / 100)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric(tr("Uygunluk Skoru"), f"%{match['match_pct']}")
+                    c2.metric(tr("Eşleşen Beceri"), len(match["matched_skills"]))
+                    c3.metric(tr("Eksik Beceri"), len(match["missing_skills"]))
+
+                    fig = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=match["match_pct"],
+                        number={"suffix": "%"},
+                        gauge={"axis": {"range": [0, 100]}, "bar": {"color": STATUS[status]}},
+                    ))
+                    apply_layout(fig)
+                    st.plotly_chart(fig, width="stretch", theme=None)
+
+                    left, right = st.columns(2)
+                    with left:
+                        st.markdown(tr("**✅ Eşleşen Beceriler**"))
+                        st.write(", ".join(match["matched_skills"]) if match["matched_skills"] else "—")
+                    with right:
+                        st.markdown(tr("**❌ Eksik Beceriler**"))
+                        st.write(", ".join(match["missing_skills"]) if match["missing_skills"] else "—")
+
+                    if match["missing_skills"]:
+                        st.markdown(tr("**📚 Gelişim Önerileri**"))
+                        for tip in skill_development_tips(match["missing_skills"]):
+                            st.markdown(f"- {tr(tip)}")
+
+                    if match["required_experience"] is not None:
+                        if match["candidate_experience"] is not None:
+                            durum = tr("✅ Karşılıyor") if match["experience_met"] else tr("⚠️ Karşılamıyor")
+                            st.caption(trf(
+                                "Deneyim: ilan {required} yıl istiyor, aday ~{candidate} yıl — {durum}",
+                                required=match['required_experience'], candidate=match['candidate_experience'], durum=durum,
+                            ))
+                        else:
+                            st.caption(trf("Deneyim: ilan {required} yıl istiyor, adayın deneyimi CV'de net değil.", required=match['required_experience']))
+
+                    if match["group_breakdown"]:
+                        breakdown_df = pd.DataFrame(match["group_breakdown"])
+                        fig2 = px.bar(
+                            breakdown_df, x="İlan Beceri Sayısı", y="Alan", orientation="h",
+                            color_discrete_sequence=[CATEGORICAL[0]],
+                        )
+                        fig2.add_bar(
+                            x=breakdown_df["Eşleşen"], y=breakdown_df["Alan"], orientation="h",
+                            name="Eşleşen", marker_color=CATEGORICAL[1],
+                        )
+                        apply_layout(fig2, barmode="overlay", showlegend=False)
+                        st.plotly_chart(fig2, width="stretch", theme=None)
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.download_button(
+                        tr("JSON indir"), data=to_json_bytes(match),
+                        file_name=f"{file_name}_ilan_eslesme.json", mime="application/json", key="cv_match_json",
+                    )
+                with c2:
+                    match_blocks = [
+                        {"heading": "Uygunluk Skoru", "type": "paragraph", "content": f"%{match['match_pct']}"},
+                        {"heading": "Eşleşen Beceriler", "type": "bullets", "content": match["matched_skills"] or ["—"]},
+                        {"heading": "Eksik Beceriler", "type": "bullets", "content": match["missing_skills"] or ["—"]},
+                    ]
+                    if match["missing_skills"]:
+                        match_blocks.append({
+                            "heading": "Gelişim Önerileri", "type": "bullets",
+                            "content": skill_development_tips(match["missing_skills"]),
+                        })
+                    pdf_bytes = build_pdf(f"İlan Eşleştirme Raporu — {file_name}", match_blocks)
+                    st.download_button(
+                        tr("PDF indir"), data=pdf_bytes,
+                        file_name=f"{file_name}_ilan_eslesme.pdf", mime="application/pdf", key="cv_match_pdf",
+                    )
     else:
         st.info(tr("Eşleştirme sonucu görmek için yukarıya bir ilan metni yapıştırın."))
 
@@ -272,6 +389,11 @@ def _render_single_cv():
                 ["Pozisyon", "Uygunluk Skoru", "Eşleşen Beceriler"],
                 [[p["Pozisyon"], p["Uygunluk Skoru"], p["Eşleşen Beceriler"]] for p in result["position_suggestions"]],
             )})
+        if result.get("llm_review"):
+            blocks.append({
+                "heading": "Semantik Değerlendirme (Ollama)", "type": "paragraph",
+                "content": result["llm_review"]["summary"],
+            })
         pdf_bytes = build_pdf(f"CV Analiz Raporu — {file_name}", blocks)
         st.download_button(
             tr("PDF indir"), data=pdf_bytes,
@@ -289,12 +411,30 @@ def _render_compare_cvs():
     )
     job_text = st.text_area(tr("İş ilanı metni (opsiyonel)"), height=120, key="cv_compare_job_text")
 
+    from data_loader import ollama_ready
+    use_llm = False
+    if ollama_ready():
+        use_llm = st.toggle(
+            tr("🧠 Ollama ile gelişmiş (semantik) analiz"),
+            value=True, key="cv_compare_use_llm",
+            help=tr("Her aday için yerel Ollama sunucunuzla ek semantik CV değerlendirmesi "
+                    "(ve ilan girilmişse ilana uygunluk değerlendirmesi) yapılır. Veri "
+                    "makinenizden çıkmaz. Aday sayısına bağlı olarak işlem süresi uzayabilir."),
+        )
+    else:
+        st.caption(tr("💡 Yerel bir Ollama sunucusu çalıştırırsanız burada semantik "
+                      "analiz seçeneği açılır. (Opsiyonel)"))
+
     if not files:
         st.info(tr("Devam etmek için en az iki CV dosyası yükleyin."))
         return
 
     candidates = []
-    with st.spinner(f"{len(files)} CV işleniyor..."):
+    spinner_text = (
+        trf("{n} CV işleniyor (Ollama ile semantik analiz — aday başına bir kaç dakika sürebilir)...", n=len(files))
+        if use_llm else trf("{n} CV işleniyor...", n=len(files))
+    )
+    with st.spinner(spinner_text):
         for f in files:
             try:
                 text = extract_text(f)
@@ -305,8 +445,8 @@ def _render_compare_cvs():
                 st.warning(trf("**{name}** dosyasından metin çıkarılamadı (taranmış görsel PDF olabilir).", name=f.name))
                 continue
 
-            result = analyze_cv(text)
-            match = match_cv_to_job(text, job_text) if job_text.strip() else None
+            result = analyze_cv(text, use_llm=use_llm)
+            match = match_cv_to_job(text, job_text, use_llm=use_llm) if job_text.strip() else None
             candidates.append({"dosya": f.name, "text": text, "result": result, "match": match})
 
     if not candidates:
@@ -443,40 +583,75 @@ def _render_compare_cvs():
             c3.metric(tr("Genel Skor"), general_score(r))
             c4.metric(tr("Tahmini İşe Uygunluk Olasılığı"), f"%{candidate_likelihood}")
 
-            st.markdown(tr("**🎯 Tahmin Edilen En Uygun Pozisyonlar**"))
-            if r["position_suggestions"]:
-                for p in r["position_suggestions"][:3]:
-                    st.markdown(f"- **{p['Pozisyon']}** ({tr('uygunluk skoru')}: {p['Uygunluk Skoru']}) — {p['Eşleşen Beceriler']}")
+            llm_review = r.get("llm_review")
+            if use_llm and llm_review:
+                # Yalnızca Ollama değerlendirmesi gösterilir — kural tabanlı
+                # değerlendirme bilinçli olarak gizlenir.
+                st.markdown(tr("**🧠 Yapay Zeka Değerlendirmesi (Ollama)**"))
+                st.caption(llm_review["summary"])
+                st.markdown(tr("**🎯 Önerilen Pozisyonlar:** ") + (", ".join(llm_review["position_suggestions"]) if llm_review["position_suggestions"] else "—"))
+                left, right = st.columns(2)
+                with left:
+                    st.markdown(tr("### 💪 Güçlü Yönler"))
+                    for s in llm_review["strengths"]:
+                        st.markdown(f"- {s}")
+                with right:
+                    st.markdown(tr("### 🔧 Gelişime Açık Yönler"))
+                    for w in llm_review["weaknesses"]:
+                        st.markdown(f"- {w}")
+                if llm_review["improvement_tips"]:
+                    st.markdown(tr("### 📝 Geliştirme Önerileri"))
+                    for tip in llm_review["improvement_tips"]:
+                        st.markdown(f"- {tip}")
             else:
-                st.caption(tr("Yeterli beceri anahtar kelimesi bulunamadığı için pozisyon önerisi üretilemedi."))
+                if use_llm and llm_review is None:
+                    st.caption(tr("Semantik CV değerlendirmesi bu aday için alınamadı; kural tabanlı sonuç gösteriliyor."))
 
-            left, right = st.columns(2)
-            with left:
-                st.markdown(tr("### 💪 Güçlü Yönler"))
-                for s in r["strengths"]:
-                    st.markdown(f"- {tr(s)}")
-            with right:
-                st.markdown(tr("### 🔧 Gelişime Açık Yönler"))
-                for w in r["weaknesses"]:
-                    st.markdown(f"- {tr(w)}")
+                st.markdown(tr("**🎯 Tahmin Edilen En Uygun Pozisyonlar**"))
+                if r["position_suggestions"]:
+                    for p in r["position_suggestions"][:3]:
+                        st.markdown(f"- **{p['Pozisyon']}** ({tr('uygunluk skoru')}: {p['Uygunluk Skoru']}) — {p['Eşleşen Beceriler']}")
+                else:
+                    st.caption(tr("Yeterli beceri anahtar kelimesi bulunamadığı için pozisyon önerisi üretilemedi."))
 
-            candidate_likelihood_status = risk_status(1 - candidate_likelihood / 100)
-            if candidate_likelihood_status in ("serious", "critical") and r["improvement_tips"]:
-                st.markdown(tr("### 📝 Geliştirme Önerileri"))
-                for tip in r["improvement_tips"]:
-                    st.markdown(f"- {tr(tip)}")
+                left, right = st.columns(2)
+                with left:
+                    st.markdown(tr("### 💪 Güçlü Yönler"))
+                    for s in r["strengths"]:
+                        st.markdown(f"- {tr(s)}")
+                with right:
+                    st.markdown(tr("### 🔧 Gelişime Açık Yönler"))
+                    for w in r["weaknesses"]:
+                        st.markdown(f"- {tr(w)}")
 
-            if c["match"] is not None and c["match"]["match_pct"] is not None:
+                candidate_likelihood_status = risk_status(1 - candidate_likelihood / 100)
+                if candidate_likelihood_status in ("serious", "critical") and r["improvement_tips"]:
+                    st.markdown(tr("### 📝 Geliştirme Önerileri"))
+                    for tip in r["improvement_tips"]:
+                        st.markdown(f"- {tr(tip)}")
+
+            if c["match"] is not None:
                 m = c["match"]
-                status = risk_status(1 - m["match_pct"] / 100)
-                st.markdown(f"**{tr('İlana Uygunluk')}:** :{'green' if status=='good' else 'orange' if status in ('warning','serious') else 'red'}[%{m['match_pct']}]")
-                mleft, mright = st.columns(2)
-                with mleft:
-                    st.markdown(tr("**✅ Eşleşen Beceriler**"))
-                    st.write(", ".join(m["matched_skills"]) if m["matched_skills"] else "—")
-                with mright:
-                    st.markdown(tr("**❌ Eksik Beceriler**"))
-                    st.write(", ".join(m["missing_skills"]) if m["missing_skills"] else "—")
+                insight = m.get("llm_insight")
+                if use_llm and insight:
+                    st.markdown(tr("**🧠 Yapay Zeka İlan Değerlendirmesi (Ollama):** ") + f"%{insight['semantic_match_pct']}")
+                    st.caption(insight["summary"])
+                    if insight["implicit_skills"]:
+                        st.markdown(tr("*İma edilen beceriler:* ") + ", ".join(insight["implicit_skills"]))
+                    if insight["missing_critical"]:
+                        st.markdown(tr("*Kritik eksikler:* ") + ", ".join(insight["missing_critical"]))
+                elif m["match_pct"] is not None:
+                    if use_llm and insight is None:
+                        st.caption(tr("Semantik analiz bu aday için alınamadı; kural tabanlı sonuç gösteriliyor."))
+                    status = risk_status(1 - m["match_pct"] / 100)
+                    st.markdown(f"**{tr('İlana Uygunluk')}:** :{'green' if status=='good' else 'orange' if status in ('warning','serious') else 'red'}[%{m['match_pct']}]")
+                    mleft, mright = st.columns(2)
+                    with mleft:
+                        st.markdown(tr("**✅ Eşleşen Beceriler**"))
+                        st.write(", ".join(m["matched_skills"]) if m["matched_skills"] else "—")
+                    with mright:
+                        st.markdown(tr("**❌ Eksik Beceriler**"))
+                        st.write(", ".join(m["missing_skills"]) if m["missing_skills"] else "—")
 
     st.markdown(tr("### Dışa Aktar"))
     if no_suitable_candidate:

@@ -1,3 +1,4 @@
+import ollama_client
 from cv_analysis import (
     analyze_cv,
     ats_compatibility,
@@ -318,3 +319,49 @@ def test_skill_development_tips_falls_back_to_group_based_tip():
 def test_skill_development_tips_respects_limit():
     tips = skill_development_tips(["python", "sql", "docker", "git", "excel", "kanban"], limit=3)
     assert len(tips) == 3
+
+
+# --- use_llm entegrasyonu (opsiyonel yerel Ollama) — geriye dönük uyum ve fallback ---
+
+def test_analyze_cv_use_llm_false_llm_review_anahtari_yok():
+    result = analyze_cv("Python ve SQL biliyorum.", use_llm=False)
+    assert "llm_review" not in result
+
+
+def test_analyze_cv_use_llm_true_ollama_erisilemezse_kural_alanlari_korunur(monkeypatch):
+    monkeypatch.setattr(ollama_client, "semantic_cv_review", lambda *a, **k: None)
+    result = analyze_cv("Python ve SQL biliyorum.", use_llm=True)
+    assert result["llm_review"] is None
+    assert result["all_skills"]  # kural tabanlı beceri tespiti etkilenmedi
+
+
+def test_analyze_cv_use_llm_true_basarili_llm_review_eklenir(monkeypatch):
+    sahte_review = {
+        "summary": "Deneyimli bir aday.", "strengths": ["Python"], "weaknesses": ["Deneyim belirsiz"],
+        "position_suggestions": ["Yazılım Geliştirici"], "improvement_tips": ["Deneyim ekleyin"],
+    }
+    monkeypatch.setattr(ollama_client, "semantic_cv_review", lambda *a, **k: sahte_review)
+    result = analyze_cv("Python ve SQL biliyorum.", use_llm=True)
+    assert result["llm_review"] == sahte_review
+
+
+def test_match_cv_to_job_use_llm_false_llm_insight_anahtari_yok():
+    result = match_cv_to_job("Python biliyorum.", "Python bilgisi aranıyor.", use_llm=False)
+    assert "llm_insight" not in result
+
+
+def test_match_cv_to_job_use_llm_true_ollama_erisilemezse_kural_sonucu_korunur(monkeypatch):
+    monkeypatch.setattr(ollama_client, "semantic_job_match", lambda *a, **k: None)
+    result = match_cv_to_job("Python biliyorum.", "Python bilgisi aranıyor.", use_llm=True)
+    assert result["llm_insight"] is None
+    assert result["match_pct"] == 100  # kural tabanlı alan etkilenmedi
+
+
+def test_match_cv_to_job_use_llm_true_basarili_llm_insight_eklenir(monkeypatch):
+    sahte_insight = {
+        "implicit_skills": ["frontend"], "semantic_match_pct": 80,
+        "summary": "Uygun aday.", "missing_critical": [],
+    }
+    monkeypatch.setattr(ollama_client, "semantic_job_match", lambda *a, **k: sahte_insight)
+    result = match_cv_to_job("Python biliyorum.", "Python bilgisi aranıyor.", use_llm=True)
+    assert result["llm_insight"] == sahte_insight

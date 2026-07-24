@@ -1,4 +1,6 @@
 """Borsa Analizi paneli."""
+import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
@@ -11,9 +13,10 @@ from borsa_analysis import (
     predict_short_term_outlook,
     summarize,
 )
+from borsa_model import train_price_direction_model
 from export_utils import build_pdf, to_json_bytes
 from translator import tr, trf
-from theme import CATEGORICAL, MUTED, STATUS, apply_layout
+from theme import CATEGORICAL, MUTED, SEQUENTIAL_BLUE, STATUS, apply_layout
 
 CACHE_TTL_SECONDS = 900
 ORNEK_SEMBOL = "THYAO.IS"
@@ -28,6 +31,14 @@ def _cached_fetch(symbol: str, range_: str):
     df, meta, warnings = fetch_price_history(symbol, range_)
     result = summarize(df, meta)
     return df, result, warnings
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def _cached_train_ml(df: pd.DataFrame):
+    """Fiyat geçmişi (df) değişmediği sürece modeli yeniden eğitmez — checkbox
+    açıkken sayfadaki başka bir widget'ın tetiklediği her rerun'da RandomForest'ı
+    yeniden eğitmemek için."""
+    return train_price_direction_model(df)
 
 
 def _run_analysis(target: str, range_value: str):
@@ -182,6 +193,75 @@ def _render_single_section():
             icon = "🟢" if s["yön"] == 1 else ("🔴" if s["yön"] == -1 else "⚪")
             st.caption(f"{icon} **{s['ad']}** — {tr(s['açıklama'])}")
 
+    with st.container(border=True):
+        st.markdown(tr("### 🧠 ML Tabanlı Ertesi Gün Tahmini (Deneysel)"))
+        st.caption(tr(
+            "Yukarıdaki sezgiselden farklı olarak, geçmiş fiyat davranışından ÖĞRENEN gerçek "
+            "bir sınıflandırma modelidir (RandomForest). Zaman serisine uygun 'geçmişte eğit → "
+            "gelecekte test et' yöntemiyle (walk-forward backtest, bkz. TimeSeriesSplit) sınanır "
+            "ve daima naif bir temel çizgiyle (baseline: çoğunluk sınıfını tahmin et) "
+            "karşılaştırılır — ertesi gün yön tahmini doğası gereği zordur, bu karşılaştırma "
+            "modelin gerçekten işe yarayıp yaramadığını dürüstçe gösterir. Yatırım tavsiyesi "
+            "DEĞİLDİR."
+        ))
+        run_ml = st.checkbox(tr("Modeli eğit ve backtest et"), key="borsa_ml_toggle")
+        ml_result = None
+        if run_ml:
+            with st.spinner(tr("Model eğitiliyor ve geçmiş üzerinde test ediliyor...")):
+                ml_result = _cached_train_ml(df)
+
+            if not ml_result["ok"]:
+                for w in ml_result["warnings"]:
+                    st.warning(tr(w))
+            else:
+                bt = ml_result["backtest"]
+                next_day = ml_result["next_day"]
+
+                beat_label = tr("✅ Baseline'ı geçiyor") if ml_result["beats_baseline"] else tr("⚠️ Baseline'ı geçemiyor")
+                m1, m2, m3 = st.columns(3)
+                m1.metric(tr("Backtest Doğruluğu"), f"{bt['accuracy']:.1%}")
+                m2.metric(tr("Naif Baseline Doğruluğu"), f"{bt['baseline_accuracy']:.1%}")
+                m3.metric(tr("Değerlendirme"), beat_label)
+                st.caption(trf(
+                    "{n_oos} örnek üzerinde {n_folds} kat walk-forward backtest yapıldı; model her "
+                    "katta yalnızca kendisinden önceki veriyle eğitildi (veri sızıntısı yok).",
+                    n_oos=bt["n_oos_samples"], n_folds=bt["n_folds"],
+                ))
+
+                direction_color = STATUS["good"] if next_day["yön"] == "Yükseliş" else STATUS["critical"]
+                st.markdown(
+                    f"<span style='color:{direction_color}; font-size:1.2em; font-weight:700;'>"
+                    f"{tr('Ertesi Gün Tahmini')}: {tr(next_day['yön'])}</span> "
+                    f"&nbsp;({next_day['yükseliş_olasılığı']:.0%} {tr('yükseliş olasılığı')})",
+                    unsafe_allow_html=True,
+                )
+
+                with st.expander(tr("Modeli Etkileyen En Önemli Özellikler")):
+                    imp_series = pd.Series(ml_result["feature_importances"]).sort_values()
+                    fig_imp = px.bar(
+                        imp_series, x=imp_series.values, y=imp_series.index, orientation="h",
+                        labels={"x": tr("Önem Derecesi"), "y": ""},
+                        color_discrete_sequence=[CATEGORICAL[0]],
+                    )
+                    apply_layout(fig_imp, showlegend=False)
+                    st.plotly_chart(fig_imp, width="stretch", theme=None)
+
+                with st.expander(tr("Karışıklık Matrisi (Backtest, Out-of-Sample)")):
+                    labels = [tr("Düşüş"), tr("Yükseliş")]
+                    fig_cm = px.imshow(
+                        bt["confusion_matrix"], x=labels, y=labels, text_auto=True,
+                        labels={"x": tr("Tahmin Edilen"), "y": tr("Gerçek"), "color": tr("Adet")},
+                        color_continuous_scale=SEQUENTIAL_BLUE,
+                    )
+                    apply_layout(fig_cm)
+                    st.plotly_chart(fig_cm, width="stretch", theme=None)
+
+                st.caption(tr(
+                    "Not: Bu deneysel bir makine öğrenmesi modelidir; model baseline'ı "
+                    "geçemeyebilir — bu durumda dürüstçe raporlanır. Yatırım tavsiyesi "
+                    "niteliği taşımaz."
+                ))
+
     st.markdown(tr("### 📈 Fiyat, Hacim ve Teknik Göstergeler") if show_indicators else tr("### 📈 Fiyat Grafiği"))
     chart_type = st.radio(tr("Grafik Tipi"), [tr("Çizgi"), tr("Mum")], horizontal=True, key="borsa_chart_type")
 
@@ -264,6 +344,7 @@ def _render_single_section():
             "sembol": symbol_name,
             "ozet": result,
             "kisa_vadeli_yon_sezgiseli": outlook,
+            "ml_ertesi_gun_tahmini": ml_result if ml_result and ml_result.get("ok") else None,
             "fiyat_gecmisi": display_df.to_dict(orient="records"),
             "uyarilar": warnings,
         }
@@ -294,6 +375,18 @@ def _render_single_section():
                 display_df.astype(str).values.tolist()[-40:],
             )},
         ]
+        if ml_result and ml_result.get("ok"):
+            bt = ml_result["backtest"]
+            blocks.insert(2, {
+                "heading": tr("ML Tabanlı Ertesi Gün Tahmini (deneysel, yatırım tavsiyesi değildir)"),
+                "type": "bullets", "content": [
+                    trf("Yön: {yon} ({olasilik:.0%} yükseliş olasılığı)",
+                        yon=ml_result["next_day"]["yön"], olasilik=ml_result["next_day"]["yükseliş_olasılığı"]),
+                    trf("Backtest doğruluğu: {acc:.1%} (naif baseline: {base:.1%})",
+                        acc=bt["accuracy"], base=bt["baseline_accuracy"]),
+                    tr("Baseline'ı geçiyor.") if ml_result["beats_baseline"] else tr("Baseline'ı geçemiyor."),
+                ],
+            })
         if warnings:
             blocks.append({"heading": tr("Uyarılar"), "type": "bullets", "content": warnings})
         pdf_bytes = build_pdf(trf("Borsa Analiz Raporu — {symbol}", symbol=symbol_name), blocks)

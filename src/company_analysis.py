@@ -478,16 +478,29 @@ def sentiment_timeline(df: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
-def build_dataframe(company: str) -> tuple[pd.DataFrame, list[str]]:
-    records, warnings = collect_mentions(company)
-    if not records:
-        return pd.DataFrame(columns=["başlık", "kaynak", "link", "tarih", "tür", "özet", "duygu", "skor"]), warnings
+def label_mentions(records: list[dict], sentiment_fn=analyze_sentiment) -> pd.DataFrame:
+    """Toplanmış kayıtları (bkz. `collect_mentions()`) verilen duygu fonksiyonuyla etiketler.
 
+    `sentiment_fn(text) -> (etiket, skor)` imzasında herhangi bir fonksiyon kabul eder;
+    varsayılan sözlük tabanlı `analyze_sentiment`'tır. Bu ayrım, `collect_mentions()`'ın
+    (ağ çağrısı gerektiren, pahalı) tekrar çalıştırılmasına gerek kalmadan aynı kayıt
+    kümesinin farklı yöntemlerle (sözlük vs. `sentiment_model.py`'deki ML sınıflandırıcı)
+    yeniden etiketlenebilmesini sağlar — bkz. `app/panels/company_panel.py`.
+    """
+    if not records:
+        return pd.DataFrame(columns=["başlık", "kaynak", "link", "tarih", "tür", "özet", "duygu", "skor"])
+
+    records = [dict(r) for r in records]
     for r in records:
-        label, score = analyze_sentiment(f"{r['başlık']} {r['özet']}")
+        label, score = sentiment_fn(f"{r['başlık']} {r['özet']}")
         r["duygu"] = label
         r["skor"] = score
-    return pd.DataFrame(records), warnings
+    return pd.DataFrame(records)
+
+
+def build_dataframe(company: str, sentiment_fn=analyze_sentiment) -> tuple[pd.DataFrame, list[str]]:
+    records, warnings = collect_mentions(company)
+    return label_mentions(records, sentiment_fn), warnings
 
 
 def build_report(company: str, df: pd.DataFrame, topics: list[tuple[str, int]], warnings: list[str]) -> str:

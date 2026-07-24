@@ -4,10 +4,20 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from company_analysis import build_dataframe, extract_topics, reputation_score, segment_outlook, sentiment_timeline
+from company_analysis import (
+    analyze_sentiment,
+    collect_mentions,
+    extract_topics,
+    label_mentions,
+    reputation_score,
+    segment_outlook,
+    sentiment_timeline,
+)
+from data_loader import load_sentiment_model, load_sentiment_model_metrics
+from sentiment_model import predict_batch
 from export_utils import build_pdf, to_json_bytes
 from translator import tr, trf
-from theme import CATEGORICAL, MUTED, STATUS, apply_layout
+from theme import CATEGORICAL, MUTED, SEQUENTIAL_BLUE, STATUS, apply_layout
 
 CACHE_TTL_SECONDS = 1800
 ORNEK_SIRKET = "Turkcell"
@@ -15,11 +25,41 @@ ORNEK_SIRKET_B = "Türk Telekom"
 
 
 @st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
-def _cached_scan(company: str):
-    df, warnings = build_dataframe(company)
+def _cached_collect(company: str):
+    """Ham tarama (ağ çağrıları) — sözlük ve ML etiketleme yollarının ikisi de aynı
+    taranmış kayıtları kullanır, böylece ML toggle'ı açıp kapatmak yeniden tarama
+    tetiklemez."""
+    return collect_mentions(company)
+
+
+def _build_scan(company: str, sentiment_fn):
+    records, warnings = _cached_collect(company)
+    df = label_mentions(records, sentiment_fn)
     topics = extract_topics((df["başlık"] + " " + df["özet"]).tolist(), company) if not df.empty else []
     outlooks = segment_outlook(df, company)
     return df, topics, warnings, outlooks
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def _cached_scan(company: str):
+    return _build_scan(company, analyze_sentiment)
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def _cached_scan_ml(company: str):
+    """ML tabanlı duygu sınıflandırmasıyla tarama. Model dosyası yoksa None döner;
+    çağıran taraf (_render_single_section) bu durumda sözlük yöntemine sessizce döner."""
+    bundle = load_sentiment_model()
+    if bundle is None:
+        return None
+    pipeline = bundle["pipeline"]
+
+    def _ml_sentiment_fn(text: str):
+        if not text.strip():
+            return "Nötr", 0.0
+        return predict_batch(pipeline, [text])[0]
+
+    return _build_scan(company, _ml_sentiment_fn)
 
 
 def render():
@@ -46,6 +86,15 @@ def _render_single_section():
         st.write("")
         st.write("")
         ornek_clicked = st.button(tr("🔎 Örnek Dene"), key="company_example_btn", use_container_width=True)
+    use_ml = st.checkbox(
+        tr("🧠 ML Tabanlı Duygu Sınıflandırması Kullan (Deneysel)"),
+        key="company_use_ml_sentiment",
+        help=tr(
+            "TF-IDF + LogisticRegression/MultinomialNB ile eğitilmiş bir sınıflandırıcı "
+            "kullanır (bkz. src/sentiment_model.py). Kapalıyken varsayılan sözlük tabanlı "
+            "yöntem (analyze_sentiment) kullanılır."
+        ),
+    )
     analyze_clicked = st.button(tr("Analiz Et"), type="primary", disabled=not company.strip(), key="company_analyze_btn")
 
     if ornek_clicked:
@@ -54,12 +103,26 @@ def _render_single_section():
     if (analyze_clicked and company.strip()) or ornek_clicked:
         target = company.strip() or ORNEK_SIRKET
         with st.spinner(trf("'{target}' için web ve haber kaynakları taranıyor...", target=target)):
-            df, topics, warnings, outlooks = _cached_scan(target)
+            used_ml = False
+            if use_ml:
+                scan_result = _cached_scan_ml(target)
+                if scan_result is not None:
+                    df, topics, warnings, outlooks = scan_result
+                    used_ml = True
+                else:
+                    st.warning(tr(
+                        "ML modeli bulunamadı; önce `python src/sentiment_model.py` çalıştırın. "
+                        "Sözlük tabanlı yönteme geri dönülüyor."
+                    ))
+                    df, topics, warnings, outlooks = _cached_scan(target)
+            else:
+                df, topics, warnings, outlooks = _cached_scan(target)
         st.session_state["company_name"] = target
         st.session_state["company_df"] = df
         st.session_state["company_topics"] = topics
         st.session_state["company_warnings"] = warnings
         st.session_state["company_outlooks"] = outlooks
+        st.session_state["company_used_ml"] = used_ml
 
     if "company_df" not in st.session_state:
         st.info(tr("Analiz başlatmak için bir şirket adı girip 'Analiz Et' butonuna tıklayın veya 'Örnek Dene' ile hemen deneyin."))
@@ -70,12 +133,34 @@ def _render_single_section():
     topics = st.session_state["company_topics"]
     warnings = st.session_state["company_warnings"]
     outlooks = st.session_state["company_outlooks"]
+    used_ml = st.session_state.get("company_used_ml", False)
 
     if df.empty:
         st.warning(trf("'{company_name}' için hiçbir kaynak bulunamadı. Şirket adını farklı yazarak tekrar deneyin.", company_name=company_name))
         return
 
     st.success(trf("'{company_name}' için {n} kaynak bulundu.", company_name=company_name, n=len(df)))
+
+    if used_ml:
+        ml_metrics = load_sentiment_model_metrics()
+        if ml_metrics:
+            with st.expander(tr("🧠 ML Model Bilgisi")):
+                st.caption(trf(
+                    "Duygu etiketleri, {model} ile eğitilmiş bir sınıflandırıcı tarafından üretildi "
+                    "(bkz. src/sentiment_model.py). Test seti f1_macro: {f1:.3f}, doğruluk: {acc:.1%}.",
+                    model=ml_metrics["selected_model"],
+                    f1=ml_metrics["test_metrics"]["f1_macro"],
+                    acc=ml_metrics["test_metrics"]["accuracy"],
+                ))
+                st.caption(f"⚠️ {tr(ml_metrics['veri_seti_notu'])}")
+                labels = ml_metrics["labels"]
+                fig_cm = px.imshow(
+                    ml_metrics["confusion_matrix"], x=labels, y=labels, text_auto=True,
+                    labels={"x": tr("Tahmin Edilen"), "y": tr("Gerçek"), "color": tr("Adet")},
+                    color_continuous_scale=SEQUENTIAL_BLUE,
+                )
+                apply_layout(fig_cm)
+                st.plotly_chart(fig_cm, width="stretch", theme=None)
 
     score, status = reputation_score(df)
 
@@ -174,6 +259,7 @@ def _render_single_section():
     with c2:
         json_payload = {
             "sirket": company_name,
+            "duygu_analiz_yontemi": tr("ML (TF-IDF + sınıflandırıcı)") if used_ml else tr("Sözlük Tabanlı"),
             "toplam_kaynak": len(df),
             "itibar_puani": score,
             "duygu_dagilimi": {k: int(v) for k, v in counts.to_dict().items()},
@@ -214,10 +300,16 @@ def _render_single_section():
             file_name=f"{company_name}_analiz.pdf", mime="application/pdf", key="company_pdf",
         )
 
-    st.caption(tr(
-        "Not: Duygu analizi sözlük tabanlı sezgisel bir yöntemle hesaplanmıştır; "
-        "nihai yorum için kaynakların incelenmesi önerilir."
-    ))
+    if used_ml:
+        st.caption(tr(
+            "Not: Duygu analizi, eğitilmiş bir ML sınıflandırıcısı (deneysel) ile hesaplanmıştır; "
+            "nihai yorum için kaynakların incelenmesi önerilir."
+        ))
+    else:
+        st.caption(tr(
+            "Not: Duygu analizi sözlük tabanlı sezgisel bir yöntemle hesaplanmıştır; "
+            "nihai yorum için kaynakların incelenmesi önerilir."
+        ))
 
 
 def _render_compare_section():

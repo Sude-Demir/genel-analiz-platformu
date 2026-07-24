@@ -31,14 +31,16 @@ Uygulamayı açtığında **tek bir ekran** görürsün — sekmeler arasında s
 - 📊 **Dataset Analizi** — herhangi bir veri tablosunu incelemek için (çalışan ayrılma tahmini de bu sekmenin altındaki bir alt modül)
 - 📄 **CV Analizi** — özgeçmiş değerlendirmek için
 - 🏢 **Şirket Analizi** — bir şirketin internetteki imajını ölçmek için
+- 📈 **Borsa Analizi** — bir hisse/endeks sembolünün fiyat geçmişini ve kısa vadeli görünümünü incelemek için
+- 🤖 **YZ Karşılaştırma** — güncel yapay zeka modellerini fiyat/özellik açısından kıyaslamak için
 
 Ayrıca menüden **Türkçe / İngilizce / Almanca** arasında anlık dil değişimi yapılabilir (bkz. Madde 7).
 
-Aşağıdaki 3 madde, projenin kalbini oluşturan üç büyük özelliktir.
+Aşağıdaki maddeler, projenin kalbini oluşturan büyük özelliklerdir.
 
 ---
 
-## 4) Üç ana iş, tek tek
+## 4) Ana işler, tek tek
 
 ### 📊 A) Dataset (Veri) Analizi — "Herhangi bir tabloyu yükle, keşfet"
 
@@ -67,6 +69,20 @@ Aşağıdaki 3 madde, projenin kalbini oluşturan üç büyük özelliktir.
 - Bunlardan **0-100 arası bir "itibar puanı"** hesaplar (İyi / Uyarı / Ciddi / Kritik gibi durumlarla birlikte).
 - En sık geçen konuları ve kaynaklara tıklanabilir linkleri de listeler.
 - Not: Bu özellik internet bağlantısı gerektirir; dış siteler bazen yanıt vermeyebilir — böyle durumlarda uygulama hata vermek yerine kullanıcıyı nazikçe uyarır.
+- Ayrıca ayrı bir **"⚖️ Şirket Karşılaştır"** bölümüyle iki şirketi yan yana kıyaslayabilirsin.
+
+### 📈 D) Borsa Analizi — "Bir sembol yaz, fiyat geçmişini ve görünümü gör"
+
+- Bir hisse senedi ya da endeks sembolü girersin (örn. BIST için "THYAO.IS", ABD hisseleri için "AAPL", endeksler için "^GSPC"); sistem Yahoo Finance'in herkese açık, anahtar gerektirmeyen veri ucundan fiyat geçmişini çeker.
+- Açılış/yüksek/düşük/kapanış ve hacim grafiklerini, hareketli ortalama gibi teknik göstergeleri gösterir.
+- Basit bir kural tabanlı yöntemle (yapay zekâ modeli değil) kısa vadeli bir "görünüm" (trend yorumu) üretir.
+- Ayrı bir **"⚖️ Sembol Karşılaştır"** bölümüyle iki sembolü yan yana kıyaslayabilirsin.
+
+### 🤖 E) YZ Karşılaştırma — "Yapay zekâ modellerini kıyasla"
+
+- Güncel yapay zeka (LLM) modellerini fiyatlandırma, bağlam penceresi büyüklüğü ve benchmark (karşılaştırma testi) skorlarına göre yan yana gösterir.
+- Bu veriler elle küratörlüğü yapılmış, sağlayıcıların resmi duyurularına dayanan referans verilerdir — zamanla eskiyebileceği için kesin rakamlar için resmi kaynaklar kontrol edilmelidir.
+- Seçilen her model için Google/Bing Haberler üzerinden güncel haber/duyuru taraması da yapar.
 
 ---
 
@@ -129,8 +145,10 @@ Proje, 21 Temmuz 2026 tarihinde, tek geliştirici tarafından adım adım şu ş
 9. **En güncel eklemeler** — CV Analizi'ne **ATS uyumluluğu** ve **tutarsızlık kontrolü**, Şirket Analizi'ne **itibar puanı**, anasayfaya yeni bir tasarım ve genel temaya haki renk getirildi.
 10. **Veri içgörüleri ve sadeleşme** (22 Temmuz 2026) — Yüklenen her veri setinde eksik değer, aykırı değer ve veri kalitesi sorunlarını otomatik tespit eden yeni bir modül eklendi; kullanımı azalan ayrı "Tahmin" kısayol ekranı kaldırıldı (işlevi Dataset Analizi altındaki ilgili modüle taşındı).
 11. **Çok dilli arayüz** (22-23 Temmuz 2026) — Uygulamaya Türkçe/İngilizce/Almanca dil desteği eklendi. Önce sabit bir çeviri sözlüğüyle başlandı, ardından bunun yerine Google Translate tabanlı, sonuçları önbelleğe alan daha esnek bir çeviri sistemine (`translator.py`) geçildi; bu sırada Şirket Analizi'nin haber kaynakları genişletildi (Bing Haberler, Reddit eklendi) ve Bing'den gelen kaynak isimlerinin/linklerinin doğru ayrıştırılmadığı bir hata giderildi.
+12. **CV ve karşılaştırma iyileştirmeleri** (23 Temmuz 2026) — CV Analizi'ne somut iyileştirme önerileri ve yeni bir "Bulut/DevOps" beceri grubu eklendi; Auto Model modülüne confusion matrix/ROC eğrisi grafikleri getirildi; Şirket Analizi'ne "⚖️ Şirket Karşılaştır" bölümü eklendi.
+13. **Borsa Analizi ve YZ Karşılaştırma panelleri** (24 Temmuz 2026) — İki yeni ana panel eklendi: **Borsa Analizi** (Yahoo Finance'in anahtarsız veri ucundan hisse/endeks fiyat geçmişi ve teknik gösterge analizi, ayrıca "⚖️ Sembol Karşılaştır" bölümü) ve **YZ Karşılaştırma** (güncel yapay zeka modellerini fiyat/bağlam/benchmark açısından kıyaslama, model başına güncel haber taraması). Bu vesileyle panel metadata'sı (`panel_registry.py`) tek bir merkezi listeye taşındı — yeni bir panel eklerken artık sidebar etiketi ve anasayfa kartı otomatik senkron kalıyor.
 
-Genel yön özetle: *önce sağlam bir temel → sonra modeli güçlendirme → sonra CV tarafını akıllandırma → sonra görselleri güzelleştirme → sonra mimariyi sadeleştirme → sonra ileri düzey analiz özellikleri → en son çok dilli erişilebilirlik.*
+Genel yön özetle: *önce sağlam bir temel → sonra modeli güçlendirme → sonra CV tarafını akıllandırma → sonra görselleri güzelleştirme → sonra mimariyi sadeleştirme → sonra ileri düzey analiz özellikleri → sonra çok dilli erişilebilirlik → en son borsa ve yapay zekâ karşılaştırma panelleri.*
 
 ---
 
@@ -178,4 +196,4 @@ python -m pytest tests/ -v
 
 ## Sonuç
 
-Bu proje, dış AI servislerine bağlı kalmadan; veri, özgeçmiş ve şirket itibarı analizini tek bir Türkçe arayüzde birleştiren, test edilmiş ve düzenli olarak geliştirilen bir araç hâline geldi. Her panelin çıktısı istenirse CSV, JSON veya PDF olarak dışa aktarılabiliyor.
+Bu proje, dış AI servislerine bağlı kalmadan; veri, özgeçmiş, şirket itibarı, borsa fiyat hareketleri ve yapay zekâ modeli karşılaştırmasını tek bir Türkçe arayüzde birleştiren, test edilmiş ve düzenli olarak geliştirilen bir araç hâline geldi. Her panelin çıktısı istenirse CSV, JSON veya PDF olarak dışa aktarılabiliyor.

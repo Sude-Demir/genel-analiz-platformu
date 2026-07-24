@@ -1,0 +1,85 @@
+{
+  "selected_model": "LogisticRegression",
+  "model_comparison": [
+    {
+      "model": "LogisticRegression",
+      "cv_f1_macro": 0.8772613092342905,
+      "best_params": {
+        "clf__C": 10.0
+      }
+    },
+    {
+      "model": "MultinomialNB",
+      "cv_f1_macro": 0.8562318964582383,
+      "best_params": {
+        "clf__alpha": 0.1
+      }
+    }
+  ],
+  "n_samples": 48940,
+  "label_distribution": {
+    "Pozitif": 26196,
+    "Nötr": 17092,
+    "Negatif": 5652
+  },
+  "test_metrics": {
+    "accuracy": 0.9169391091131999,
+    "f1_macro": 0.8770995092971825,
+    "report": {
+      "Negatif": {
+        "precision": 0.7243963363863447,
+        "recall": 0.7692307692307693,
+        "f1-score": 0.7461406518010292,
+        "support": 1131.0
+      },
+      "Nötr": {
+        "precision": 0.9405099150141643,
+        "recall": 0.9713282621416033,
+        "f1-score": 0.9556706966033391,
+        "support": 3418.0
+      },
+      "Pozitif": {
+        "precision": 0.9462131698635554,
+        "recall": 0.9133422408856652,
+        "f1-score": 0.9294871794871795,
+        "support": 5239.0
+      },
+      "accuracy": 0.9169391091131999,
+      "macro avg": {
+        "precision": 0.8703731404213548,
+        "recall": 0.8846337574193459,
+        "f1-score": 0.8770995092971825,
+        "support": 9788.0
+      },
+      "weighted avg": {
+        "precision": 0.918590717499646,
+        "recall": 0.9169391091131999,
+        "f1-score": 0.9174449173999295,
+        "support": 9788.0
+      }
+    }
+  },
+  "confusion_matrix": [
+    [
+      870,
+      48,
+      213
+    ],
+    [
+      39,
+      3320,
+      59
+    ],
+    [
+      292,
+      162,
+      4785
+    ]
+  ],
+  "labels": [
+    "Negatif",
+    "Nötr",
+    "Pozitif"
+  ],
+  "veri_seti_notu": "Nötr sınıfının büyük çoğunluğu Wikipedia cümlelerinden gelir (yapısal olarak haber başlığı/yorumdan farklı bir dil kullanır); model gerçek kısa haber/yorum metinlerinde nötr sınıfı için daha az güvenilir olabilir."
+}

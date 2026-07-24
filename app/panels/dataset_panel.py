@@ -5,7 +5,7 @@ import streamlit as st
 
 from auto_model import infer_column_types
 from data_insights import data_quality_report, detect_outliers, generate_insights
-from data_loader import data_ready, load_employees, load_explainer, load_model
+from data_loader import data_ready, load_employees, load_explainer, load_model, load_model_metrics
 from export_utils import build_pdf, to_json_bytes
 from translator import tr, trf
 from model import CATEGORICAL_FEATURES, NUMERIC_FEATURES
@@ -240,7 +240,7 @@ def _render_upload_and_analysis_section():
     if secim == modul_auto:
         auto_model_module.render(df, state_prefix="ds")
     elif secim == modul_attrition:
-        attrition.render(df, bundle["pipeline"], explainer)
+        attrition.render(df, bundle["pipeline"], explainer, load_model_metrics())
     elif secim == modul_performance:
         performance.render(df)
     elif secim == modul_salary:

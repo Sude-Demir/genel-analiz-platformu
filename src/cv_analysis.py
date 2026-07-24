@@ -3,6 +3,12 @@
 Harici bir LLM/API'ye bağımlı olmadan çalışır: beceri anahtar kelimeleri, basit
 regex desenleri ve alan->pozisyon eşlemesi üzerinden güçlü/zayıf yön özeti ve
 uygun pozisyon önerisi üretir. Bu nedenle sonuçlar bir ön değerlendirme niteliğindedir.
+
+`analyze_cv()` ve `match_cv_to_job()`, isteğe bağlı olarak (`use_llm=True`,
+varsayılan kapalı) kullanıcının kendi makinesinde çalışan **yerel** bir
+Ollama sunucusuyla (bkz. `ollama_client.py`) zenginleştirilebilir — bu
+harici bir API sayılmaz (anahtarsız, veri dışarı çıkmaz). Ollama
+erişilemezse sonuç sessizce mevcut kural tabanlı haliyle döner.
 """
 import difflib
 import io
@@ -268,7 +274,17 @@ def detect_education(text_lower: str) -> str | None:
     return None
 
 
-def analyze_cv(text: str) -> dict:
+def analyze_cv(text: str, *, use_llm: bool = False, llm_model: str | None = None) -> dict:
+    """CV metnini kural tabanlı (sezgisel) yöntemle analiz eder.
+
+    `use_llm=True` verilirse (varsayılan kapalı), kural tabanlı sonuç yine
+    tam olarak hesaplanır ve döndürülür; buna ek olarak yerel Ollama
+    sunucusundan (bkz. `ollama_client.semantic_cv_review`) bütünsel bir
+    değerlendirme istenip `llm_review` anahtarına eklenir. Ollama
+    erişilemezse/yanıt bozuksa `llm_review` sessizce None olur — mevcut
+    kural tabanlı alanlar (`strengths`, `weaknesses` vb.) hiçbir zaman
+    etkilenmez.
+    """
     text_lower = turkish_lower(text)
     contact = extract_contact(text)
     name = extract_name(text, email=contact["email"])
@@ -343,7 +359,7 @@ def analyze_cv(text: str) -> dict:
         })
     position_scores.sort(key=lambda r: r["Uygunluk Skoru"], reverse=True)
 
-    return {
+    result = {
         "name": name,
         "contact": contact,
         "skills": skills,
@@ -356,6 +372,12 @@ def analyze_cv(text: str) -> dict:
         "improvement_tips": improvement_tips,
         "position_suggestions": position_scores[:5],
     }
+
+    if use_llm:
+        from ollama_client import DEFAULT_MODEL, semantic_cv_review
+        result["llm_review"] = semantic_cv_review(text, model=llm_model or DEFAULT_MODEL)
+
+    return result
 
 
 EDUCATION_SCORE_WEIGHTS: dict[str, float] = {"Ön Lisans": 0.5, "Lisans": 1, "Yüksek Lisans": 2, "Doktora": 3}
@@ -375,11 +397,19 @@ def general_score(result: dict) -> float:
     return round(score, 1)
 
 
-def match_cv_to_job(cv_text: str, job_text: str) -> dict:
+def match_cv_to_job(cv_text: str, job_text: str, *,
+                     use_llm: bool = False, llm_model: str | None = None) -> dict:
     """Bir CV'yi belirli bir iş ilanı metnine göre eşleştirir.
 
     İlan ve CV aynı SKILL_GROUPS sözlüğüyle taranır; ortak/eksik beceriler ve
     ilanın istediği deneyim ile adayın tahmini deneyimi karşılaştırılır.
+
+    `use_llm=True` verilirse (varsayılan kapalı), kural tabanlı sonuç yine
+    tam olarak hesaplanır ve döndürülür; buna ek olarak yerel Ollama
+    sunucusundan (bkz. `ollama_client.semantic_job_match`) bir semantik
+    değerlendirme istenip `llm_insight` anahtarına eklenir. Ollama
+    erişilemezse/yanıt bozuksa `llm_insight` sessizce None olur — mevcut
+    kural tabanlı alanlar (`matched_skills` vb.) hiçbir zaman etkilenmez.
     """
     job_lower = turkish_lower(job_text)
     cv_lower = turkish_lower(cv_text)
@@ -413,7 +443,7 @@ def match_cv_to_job(cv_text: str, job_text: str) -> dict:
         else None
     )
 
-    return {
+    result = {
         "job_skills": job_skills,
         "cv_skills": cv_skills,
         "matched_skills": matched_skills,
@@ -424,6 +454,12 @@ def match_cv_to_job(cv_text: str, job_text: str) -> dict:
         "experience_met": experience_met,
         "group_breakdown": group_breakdown,
     }
+
+    if use_llm:
+        from ollama_client import DEFAULT_MODEL, semantic_job_match
+        result["llm_insight"] = semantic_job_match(cv_text, job_text, model=llm_model or DEFAULT_MODEL)
+
+    return result
 
 
 # Bazı becerilere özel, kısa gelişim önerileri. Burada olmayan beceriler için

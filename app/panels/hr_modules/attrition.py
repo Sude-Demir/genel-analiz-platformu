@@ -7,7 +7,7 @@ import streamlit as st
 from export_utils import build_pdf, to_json_bytes
 from translator import tr, trf
 from model import CATEGORICAL_FEATURES, NUMERIC_FEATURES, explain_instance, get_feature_importances
-from theme import CATEGORICAL, STATUS, apply_layout, risk_status
+from theme import CATEGORICAL, MUTED, SEQUENTIAL_BLUE, STATUS, apply_layout, risk_status
 
 
 def render_risk_calculator(emp: pd.DataFrame, pipeline, explainer, key_prefix: str = "attr"):
@@ -119,7 +119,7 @@ def render_risk_calculator(emp: pd.DataFrame, pipeline, explainer, key_prefix: s
         )
 
 
-def render(emp: pd.DataFrame, pipeline, explainer):
+def render(emp: pd.DataFrame, pipeline, explainer, metrics: dict | None = None):
     X_all = emp[CATEGORICAL_FEATURES + NUMERIC_FEATURES]
     emp = emp.copy()
     with st.spinner(tr("Tüm çalışanlar için risk skorları hesaplanıyor...")):
@@ -138,7 +138,88 @@ def render(emp: pd.DataFrame, pipeline, explainer):
             )
             apply_layout(fig, showlegend=False)
             st.plotly_chart(fig, width="stretch", theme=None)
-            st.caption(tr("Model: LightGBM (Gradient Boosting) sınıflandırıcı, IBM HR Analytics Employee Attrition veri seti üzerinde eğitildi."))
+            if metrics:
+                st.caption(trf(
+                    "Model: {model} sınıflandırıcı — CV ile karşılaştırılan adaylar arasından seçildi, "
+                    "IBM HR Analytics Employee Attrition veri seti üzerinde eğitildi.",
+                    model=metrics["selected_model"],
+                ))
+            else:
+                st.caption(tr("Model: LightGBM (Gradient Boosting) sınıflandırıcı, IBM HR Analytics Employee Attrition veri seti üzerinde eğitildi."))
+
+        if metrics is None:
+            st.caption(tr("Model karşılaştırma ve değerlendirme detayları için modeli `python src/model.py` ile yeniden eğitin."))
+        else:
+            st.subheader(tr("Model Karşılaştırması"))
+            with st.container(border=True):
+                comp_df = pd.DataFrame(metrics["model_comparison"])[["model", "cv_roc_auc"]]
+                comp_df.columns = [tr("Model"), "CV ROC-AUC"]
+                st.dataframe(comp_df.style.format({"CV ROC-AUC": "{:.3f}"}), width="stretch", hide_index=True)
+                st.caption(trf("Seçilen model: **{model}**", model=metrics["selected_model"]))
+
+            st.subheader(tr("Test Seti Performansı"))
+            with st.container(border=True):
+                m1, m2 = st.columns(2)
+                m1.metric(tr("Doğruluk (Accuracy)"), f"{metrics['test_metrics']['accuracy']:.1%}")
+                m2.metric("ROC-AUC", f"{metrics['test_metrics']['roc_auc']:.3f}")
+
+                labels = [tr("Kalıyor"), tr("Ayrılıyor")]
+                eval_cols = st.columns(2)
+                with eval_cols[0]:
+                    st.markdown(tr("**Karışıklık Matrisi (Confusion Matrix)**"))
+                    fig_cm = px.imshow(
+                        metrics["confusion_matrix"], x=labels, y=labels, text_auto=True,
+                        labels={"x": tr("Tahmin Edilen"), "y": tr("Gerçek"), "color": tr("Adet")},
+                        color_continuous_scale=SEQUENTIAL_BLUE,
+                    )
+                    apply_layout(fig_cm)
+                    st.plotly_chart(fig_cm, width="stretch", theme=None)
+                with eval_cols[1]:
+                    st.markdown(tr("**ROC Eğrisi**"))
+                    roc = metrics["roc_curve"]
+                    fig_roc = go.Figure()
+                    fig_roc.add_trace(go.Scatter(
+                        x=roc["fpr"], y=roc["tpr"], mode="lines",
+                        name="ROC", line=dict(color=CATEGORICAL[0]),
+                    ))
+                    fig_roc.add_trace(go.Scatter(
+                        x=[0, 1], y=[0, 1], mode="lines",
+                        name=tr("Rastgele"), line=dict(color=MUTED, dash="dash"),
+                    ))
+                    apply_layout(fig_roc, xaxis_title=tr("Yanlış Pozitif Oranı"), yaxis_title=tr("Doğru Pozitif Oranı"))
+                    st.plotly_chart(fig_roc, width="stretch", theme=None)
+
+            st.subheader(tr("Öğrenme ve Kalibrasyon Eğrileri"))
+            with st.container(border=True):
+                curve_cols = st.columns(2)
+                with curve_cols[0]:
+                    st.markdown(tr("**Öğrenme Eğrisi (Learning Curve)**"))
+                    lc = metrics["learning_curve"]
+                    fig_lc = go.Figure()
+                    fig_lc.add_trace(go.Scatter(
+                        x=lc["train_sizes"], y=lc["train_scores_mean"], mode="lines+markers",
+                        name=tr("Eğitim Skoru"), line=dict(color=CATEGORICAL[0]),
+                    ))
+                    fig_lc.add_trace(go.Scatter(
+                        x=lc["train_sizes"], y=lc["test_scores_mean"], mode="lines+markers",
+                        name=tr("Doğrulama Skoru"), line=dict(color=CATEGORICAL[1]),
+                    ))
+                    apply_layout(fig_lc, xaxis_title=tr("Eğitim Örneği Sayısı"), yaxis_title="ROC-AUC")
+                    st.plotly_chart(fig_lc, width="stretch", theme=None)
+                with curve_cols[1]:
+                    st.markdown(tr("**Kalibrasyon Eğrisi**"))
+                    cal = metrics["calibration_curve"]
+                    fig_cal = go.Figure()
+                    fig_cal.add_trace(go.Scatter(
+                        x=cal["prob_pred"], y=cal["prob_true"], mode="lines+markers",
+                        name=tr("Model"), line=dict(color=CATEGORICAL[0]),
+                    ))
+                    fig_cal.add_trace(go.Scatter(
+                        x=[0, 1], y=[0, 1], mode="lines",
+                        name=tr("Mükemmel Kalibrasyon"), line=dict(color=MUTED, dash="dash"),
+                    ))
+                    apply_layout(fig_cal, xaxis_title=tr("Tahmin Edilen Olasılık"), yaxis_title=tr("Gözlenen Sıklık"))
+                    st.plotly_chart(fig_cal, width="stretch", theme=None)
 
     with tab2:
         render_risk_calculator(emp, pipeline, explainer, key_prefix="attr")

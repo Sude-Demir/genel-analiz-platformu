@@ -1,8 +1,17 @@
 """CV Analizi panelini Streamlit'in AppTest çerçevesiyle uçtan uca (gerçek widget
 etkileşimleriyle, başsız modda) çalıştıran entegrasyon testi.
+
+Bu testler kural tabanlı (deterministik) analiz yolunu doğrular; bu yüzden
+`data_loader.ollama_ready` her testte sahte olarak False'a sabitlenir.
+Aksi halde, çalıştıran makinede gerçekten bir Ollama sunucusu kuruluysa
+testler yavaş (aday başına saniyeler/dakikalar) ve olasılıksal (LLM çıktısına
+bağlı) hale gelir — bkz. `tests/test_ollama_client.py` ve
+`tests/test_cv_analysis.py` (opsiyonel Ollama entegrasyonunun kendi mock'lu
+birim testleri, ayrı olarak orada test edilir).
 """
 import os
 
+import data_loader
 from streamlit.testing.v1 import AppTest
 
 APP_HOME = os.path.join(os.path.dirname(__file__), "..", "app", "Home.py")
@@ -21,7 +30,8 @@ CV_TEXT = (
 )
 
 
-def _open_cv_panel():
+def _open_cv_panel(monkeypatch):
+    monkeypatch.setattr(data_loader, "ollama_ready", lambda: False)
     at = AppTest.from_file(APP_HOME, default_timeout=60)
     at.run()
     assert not at.exception
@@ -32,13 +42,13 @@ def _open_cv_panel():
     return at
 
 
-def test_cv_panel_loads_without_exceptions():
-    at = _open_cv_panel()
+def test_cv_panel_loads_without_exceptions(monkeypatch):
+    at = _open_cv_panel(monkeypatch)
     assert not at.exception
 
 
-def test_cv_upload_detects_turkish_and_english_skills():
-    at = _open_cv_panel()
+def test_cv_upload_detects_turkish_and_english_skills(monkeypatch):
+    at = _open_cv_panel(monkeypatch)
     uploader = at.file_uploader[0]
     uploader.upload("test_cv.txt", CV_TEXT.encode("utf-8"), "text/plain").run()
     assert not at.exception
@@ -49,8 +59,8 @@ def test_cv_upload_detects_turkish_and_english_skills():
     assert metrics["Tespit Edilen Beceri Sayısı"] == "7"
 
 
-def test_job_matching_section_renders_correct_score():
-    at = _open_cv_panel()
+def test_job_matching_section_renders_correct_score(monkeypatch):
+    at = _open_cv_panel(monkeypatch)
     uploader = at.file_uploader[0]
     uploader.upload("test_cv.txt", CV_TEXT.encode("utf-8"), "text/plain").run()
 
@@ -73,7 +83,8 @@ JUNIOR_CV_TEXT = (
 )
 
 
-def _open_compare_mode():
+def _open_compare_mode(monkeypatch):
+    monkeypatch.setattr(data_loader, "ollama_ready", lambda: False)
     at = AppTest.from_file(APP_HOME, default_timeout=60)
     at.run()
     assert not at.exception
@@ -88,8 +99,8 @@ def _open_compare_mode():
     return at
 
 
-def test_compare_mode_ranks_candidates_by_general_score_without_job():
-    at = _open_compare_mode()
+def test_compare_mode_ranks_candidates_by_general_score_without_job(monkeypatch):
+    at = _open_compare_mode(monkeypatch)
     uploader = next(fu for fu in at.file_uploader if fu.label == "CV dosyaları")
     uploader.upload("aday_deneyimli.txt", CV_TEXT.encode("utf-8"), "text/plain")
     uploader.upload("aday_junior.txt", JUNIOR_CV_TEXT.encode("utf-8"), "text/plain")
@@ -101,8 +112,8 @@ def test_compare_mode_ranks_candidates_by_general_score_without_job():
     assert any("aday_deneyimli.txt" in msg for msg in success_msgs)
 
 
-def test_compare_mode_ranks_candidates_by_job_match_when_job_given():
-    at = _open_compare_mode()
+def test_compare_mode_ranks_candidates_by_job_match_when_job_given(monkeypatch):
+    at = _open_compare_mode(monkeypatch)
     uploader = next(fu for fu in at.file_uploader if fu.label == "CV dosyaları")
     uploader.upload("aday_deneyimli.txt", CV_TEXT.encode("utf-8"), "text/plain")
     uploader.upload("aday_junior.txt", JUNIOR_CV_TEXT.encode("utf-8"), "text/plain")
@@ -119,7 +130,8 @@ def test_compare_mode_ranks_candidates_by_job_match_when_job_given():
     assert any("aday_deneyimli.txt" in msg and "Uygunluk %" in msg for msg in success_msgs)
 
 
-def _open_deep_mode_with_uploaded_compare_cvs():
+def _open_deep_mode_with_uploaded_compare_cvs(monkeypatch):
+    monkeypatch.setattr(data_loader, "ollama_ready", lambda: False)
     at = AppTest.from_file(APP_HOME, default_timeout=60)
     at.run()
     assert not at.exception
@@ -140,7 +152,8 @@ def _open_deep_mode_with_uploaded_compare_cvs():
     return at
 
 
-def test_deep_mode_without_compare_cvs_shows_guidance_and_does_not_crash():
+def test_deep_mode_without_compare_cvs_shows_guidance_and_does_not_crash(monkeypatch):
+    monkeypatch.setattr(data_loader, "ollama_ready", lambda: False)
     at = AppTest.from_file(APP_HOME, default_timeout=60)
     at.run()
     cv_button = next(b for b in at.sidebar.button if "CV Analizi" in b.label)
@@ -153,8 +166,8 @@ def test_deep_mode_without_compare_cvs_shows_guidance_and_does_not_crash():
     assert any("Çoklu CV Karşılaştırma" in msg for msg in info_msgs)
 
 
-def test_deep_mode_renders_four_sections_without_job_postings():
-    at = _open_deep_mode_with_uploaded_compare_cvs()
+def test_deep_mode_renders_four_sections_without_job_postings(monkeypatch):
+    at = _open_deep_mode_with_uploaded_compare_cvs(monkeypatch)
 
     analyze_btn = next(b for b in at.button if b.label == "Analiz Et")
     analyze_btn.click().run()
@@ -171,8 +184,8 @@ def test_deep_mode_renders_four_sections_without_job_postings():
     assert any("yinelenen bir kayıt bulunamadı" in msg.lower() for msg in success_msgs)
 
 
-def test_deep_mode_matches_multiple_job_postings():
-    at = _open_deep_mode_with_uploaded_compare_cvs()
+def test_deep_mode_matches_multiple_job_postings(monkeypatch):
+    at = _open_deep_mode_with_uploaded_compare_cvs(monkeypatch)
 
     job_area = next(ta for ta in at.text_area if "İş ilanları" in ta.label)
     job_area.set_value(
@@ -193,7 +206,8 @@ def test_deep_mode_matches_multiple_job_postings():
     assert ilan_df["Skor"].iloc[0] == 100
 
 
-def test_deep_mode_detects_duplicate_candidate_by_matching_contact_info():
+def test_deep_mode_detects_duplicate_candidate_by_matching_contact_info(monkeypatch):
+    monkeypatch.setattr(data_loader, "ollama_ready", lambda: False)
     at = AppTest.from_file(APP_HOME, default_timeout=60)
     at.run()
     assert not at.exception
