@@ -2,31 +2,14 @@
 import streamlit as st
 
 from translator import tr
-from theme import CATEGORICAL
+from panel_registry import PANEL_REGISTRY
 
-MODULE_CARDS = [
-    {
-        "key": "dataset", "icon": "📁",
-        "title": "Dataset Analizi",
-        "desc": "Herhangi bir veri setini yükleyip genel istatistik, görselleştirme ve İK'ya özgü alt analizler yapar.",
-        "color": CATEGORICAL[1],
-    },
-    {
-        "key": "cv", "icon": "📄",
-        "title": "CV Analizi",
-        "desc": "CV metnini beceri/pozisyon/eğitim sözlükleriyle değerlendirir, ilanla eşleştirme yüzdesi üretir.",
-        "color": CATEGORICAL[4],
-    },
-    {
-        "key": "company", "icon": "🌐",
-        "title": "Şirket Analizi",
-        "desc": "Google/Bing News RSS, Reddit ve DuckDuckGo taramasıyla şirket haberlerinde duygu analizi yapar.",
-        "color": CATEGORICAL[5],
-    },
-]
+# Kartlar app/panel_registry.py'den beslenir — yeni panel oraya eklendiğinde burada
+# hiçbir değişiklik gerekmez, kart ve modül sayacı otomatik güncellenir.
+MODULE_CARDS = PANEL_REGISTRY
 
 QUICK_FACTS = [
-    ("🧩", "3",        "Analiz Modülü"),
+    ("🧩", str(len(MODULE_CARDS)), "Analiz Modülü"),
     ("🔒", "0",        "Harici AI API Bağımlılığı"),
     ("🌳", "LightGBM", "Gerçek ML Modeli"),
 ]

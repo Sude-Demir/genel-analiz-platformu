@@ -21,7 +21,8 @@ for _p in (SRC_DIR, APP_DIR):
         sys.path.insert(0, _p)
 
 from translator import tr, warm_cache  # noqa: E402
-from panels import company_panel, cv_panel, dataset_panel, home_panel  # noqa: E402
+from panel_registry import PANEL_REGISTRY  # noqa: E402
+from panels import ai_panel, borsa_panel, company_panel, cv_panel, dataset_panel, home_panel  # noqa: E402
 
 st.set_page_config(page_title="Genel Analiz Platformu", page_icon="🧪", layout="wide")
 
@@ -29,19 +30,21 @@ st.set_page_config(page_title="Genel Analiz Platformu", page_icon="🧪", layout
 if "lang" not in st.session_state:
     st.session_state["lang"] = "tr"
 
+# Render callable eşlemesi modül import'u gerektirdiğinden burada; yeni panel eklerken
+# hem buraya hem app/panel_registry.py'ye (metadata için) kayıt eklenmeli.
 PANELS = {
     "home":    {"render": home_panel.render},
     "dataset": {"render": dataset_panel.render},
     "cv":      {"render": cv_panel.render},
     "company": {"render": company_panel.render},
+    "borsa":   {"render": borsa_panel.render},
+    "ai":      {"render": ai_panel.render},
 }
 
-PANEL_LABELS_TR = {
-    "home":    "🏠 Anasayfa",
-    "dataset": "📁 Dataset Analizi",
-    "cv":      "📄 CV Analizi",
-    "company": "🌐 Şirket Analizi",
-}
+# Sidebar etiketleri: "home" sabit, diğerleri PANEL_REGISTRY'den (app/panel_registry.py)
+# türetilir — anasayfa modül kartlarıyla aynı kaynağı paylaşır, manuel senkronizasyon gerekmez.
+PANEL_LABELS_TR = {"home": "🏠 Anasayfa"}
+PANEL_LABELS_TR.update({p["key"]: f'{p["icon"]} {p["title"]}' for p in PANEL_REGISTRY})
 
 if "active_panel" not in st.session_state:
     st.session_state["active_panel"] = "home"

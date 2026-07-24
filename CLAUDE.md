@@ -40,7 +40,9 @@ Lint konfigürasyonu (flake8, ruff vb.) bulunmamaktadır.
 
 ### SPA kabuğu (`app/Home.py`)
 
-Streamlit'in çoklu-sayfa (multipage) gezinmesi **kullanılmaz**. Bunun yerine tek script + `st.session_state["active_panel"]` deseniyle sol menüden 3 panel arasında geçiş yapılır (sayfa/URL değişmez). Yeni bir üst düzey panel eklerken bu deseni takip et: `PANELS` sözlüğüne `{"render": ...}` ve eşleşen anahtarla `PANEL_LABELS_TR` sözlüğüne emoji'li etiketini ekle (etiket `tr()` ile çevrilir, ayrıca çeviri için ayrı bir kayıt gerekmez).
+Streamlit'in çoklu-sayfa (multipage) gezinmesi **kullanılmaz**. Bunun yerine tek script + `st.session_state["active_panel"]` deseniyle sol menüden paneller arasında geçiş yapılır (sayfa/URL değişmez). Panel metadata'sı iki yerde tutulur ve **yeni bir üst düzey panel eklerken ikisi de güncellenmeli**:
+- `app/Home.py` — `PANELS` sözlüğüne `{"render": ...}` (modül import'u gerektirdiğinden render eşlemesi burada kalır).
+- `app/panel_registry.py` — `PANEL_REGISTRY` listesine `{"key", "icon", "title", "desc", "color"}` kaydı. Bu tek kayıt hem sidebar etiketini (`PANEL_LABELS_TR`, `Home.py` içinde otomatik türetilir) hem de anasayfadaki modül kartını (`home_panel.py`'nin `MODULE_CARDS`'ı, doğrudan `PANEL_REGISTRY`'yi kullanır) besler — `home_panel.py`'de ayrıca manuel bir kart eklemeye gerek yoktur, "Anasayfa" panel anahtarı bu listeye dahil edilmez. Etiketler `tr()` ile çevrilir, ayrıca çeviri için ayrı bir kayıt gerekmez.
 
 ### İki ayrı modelleme yolu (kasıtlı olarak birbirinden bağımsız)
 
